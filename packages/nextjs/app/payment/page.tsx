@@ -157,11 +157,11 @@ export default function PaymentPage() {
       ) // amount
         .toLowerCase()}` as `0x${string}`;
 
+      // Chain-agnostic signature - no chainId in domain
       const chipSig = await signTypedData({
         domain: {
           name: "TapThatXProtocol",
           version: "1",
-          chainId,
           verifyingContract: PROTOCOL_ADDRESS,
         },
         types: {

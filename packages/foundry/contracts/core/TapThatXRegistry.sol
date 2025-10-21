@@ -3,13 +3,13 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title TapThatXRegistry
 /// @notice Core registry for Tap That X protocol - manages chip registration and ownership
 /// @dev Chips prove ownership via EIP-712 signatures
-contract TapThatXRegistry is Ownable, ReentrancyGuard, EIP712 {
+/// @dev Chain-agnostic EIP-712 signatures - same signature works across all chains
+contract TapThatXRegistry is Ownable, ReentrancyGuard {
     using ECDSA for bytes32;
 
     mapping(address => address) public chipToOwner;
@@ -17,9 +17,24 @@ contract TapThatXRegistry is Ownable, ReentrancyGuard, EIP712 {
     bytes32 private constant REGISTRATION_TYPEHASH =
         keccak256("ChipRegistration(address owner,address chipAddress)");
 
+    // Chain-agnostic domain separator (no chainId in EIP-712)
+    bytes32 private immutable DOMAIN_SEPARATOR;
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,address verifyingContract)");
+
     event ChipRegistered(address indexed chip, address indexed owner);
 
-    constructor() Ownable(msg.sender) EIP712("TapThatXRegistry", "1") { }
+    constructor() Ownable(msg.sender) {
+        // Build chain-agnostic domain separator (without chainId)
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                DOMAIN_TYPEHASH,
+                keccak256(bytes("TapThatXRegistry")),
+                keccak256(bytes("1")),
+                address(this)
+            )
+        );
+    }
 
     /// @notice Register a new chip with ownership proof using EIP-712
     /// @param chipAddress The address derived from the chip's private key
@@ -30,7 +45,7 @@ contract TapThatXRegistry is Ownable, ReentrancyGuard, EIP712 {
 
         // Verify EIP-712 chip signature
         bytes32 structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, msg.sender, chipAddress));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparatorV4(), structHash));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
         address signer = digest.recover(chipSignature);
 
         require(signer == chipAddress, "Invalid chip signature");
@@ -54,9 +69,9 @@ contract TapThatXRegistry is Ownable, ReentrancyGuard, EIP712 {
         return chipToOwner[chip] != address(0);
     }
 
-    /// @notice Get the EIP-712 domain separator
-    /// @return bytes32 The domain separator
+    /// @notice Get the EIP-712 domain separator (chain-agnostic)
+    /// @return bytes32 The chain-agnostic domain separator
     function getDomainSeparator() external view returns (bytes32) {
-        return _domainSeparatorV4();
+        return DOMAIN_SEPARATOR;
     }
 }

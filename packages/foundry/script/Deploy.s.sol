@@ -70,7 +70,7 @@ contract Deploy is ScaffoldETHDeploy {
         deployments.push(Deployment({ name: "TapThatXProtocol", addr: address(protocol) }));
 
         // Deploy USDCTapPayment
-        USDCTapPayment payment = new USDCTapPayment(usdcAddress, address(protocol), address(registry));
+        USDCTapPayment payment = new USDCTapPayment(usdcAddress, address(protocol));
         console.log("USDCTapPayment deployed at:", address(payment));
 
         // Register deployment for frontend

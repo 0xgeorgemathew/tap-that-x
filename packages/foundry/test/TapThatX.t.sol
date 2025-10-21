@@ -25,7 +25,7 @@ contract TapThatXTest is Test {
         registry = new TapThatXRegistry();
         protocol = new TapThatXProtocol(address(registry));
         usdc = new MockUSDC();
-        usdcPayment = new USDCTapPayment(address(usdc), address(protocol), address(registry));
+        usdcPayment = new USDCTapPayment(address(usdc), address(protocol));
 
         // Fund test accounts
         usdc.transfer(owner, 10000 * 10 ** 6); // 10k USDC
@@ -282,7 +282,7 @@ contract TapThatXTest is Test {
         // Execute payment via example contract
         uint256 contractBalanceBefore = usdc.balanceOf(address(usdcPayment));
 
-        usdcPayment.tapToPay(owner, merchant, 100 * 10 ** 6, chipSignature, timestamp, nonce);
+        usdcPayment.tapToPay(owner, transferCallData, chipSignature, timestamp, nonce);
 
         // Verify payment went to contract (not merchant)
         assertEq(usdc.balanceOf(address(usdcPayment)), contractBalanceBefore + 100 * 10 ** 6);

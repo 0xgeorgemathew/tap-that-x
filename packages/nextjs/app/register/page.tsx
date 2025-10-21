@@ -60,11 +60,11 @@ export default function RegisterPage() {
       setFlowState("signing");
       setStatusMessage("Tap your chip again to authorize registration...");
 
+      // Chain-agnostic signature - no chainId in domain
       const registrationSig = await signTypedData({
         domain: {
           name: "TapThatXRegistry",
           version: "1",
-          chainId,
           verifyingContract: registryAddress,
         },
         types: {

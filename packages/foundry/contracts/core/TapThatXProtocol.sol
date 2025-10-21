@@ -9,9 +9,15 @@ import "./TapThatXAuth.sol";
 /// @title TapThatXProtocol
 /// @notice Core protocol for chip-authorized execution of arbitrary contract calls
 /// @dev Enables "Tap to Pay" for any blockchain interaction - not just payments
-contract TapThatXProtocol is EIP712, ReentrancyGuard {
+/// @dev Chain-agnostic EIP-712 signatures - same signature works across all chains
+contract TapThatXProtocol is ReentrancyGuard {
     TapThatXRegistry public immutable registry;
     uint256 public constant MAX_TIMESTAMP_WINDOW = 300; // 5 minutes
+
+    // Chain-agnostic domain separator (no chainId in EIP-712)
+    bytes32 private immutable DOMAIN_SEPARATOR;
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,address verifyingContract)");
 
     mapping(bytes32 => bool) public usedNonces;
 
@@ -27,9 +33,19 @@ contract TapThatXProtocol is EIP712, ReentrancyGuard {
 
     event NonceUsed(bytes32 indexed nonce);
 
-    constructor(address _registry) EIP712("TapThatXProtocol", "1") {
+    constructor(address _registry) {
         require(_registry != address(0), "Invalid registry address");
         registry = TapThatXRegistry(_registry);
+
+        // Build chain-agnostic domain separator (without chainId)
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                DOMAIN_TYPEHASH,
+                keccak256(bytes("TapThatXProtocol")),
+                keccak256(bytes("1")),
+                address(this)
+            )
+        );
     }
 
     /// @notice Execute an arbitrary contract call authorized by a registered chip
@@ -127,17 +143,17 @@ contract TapThatXProtocol is EIP712, ReentrancyGuard {
         );
 
         // Recover chip address from signature
-        address chip = TapThatXAuth.recoverChipFromCallAuth(_domainSeparatorV4(), auth, signature);
+        address chip = TapThatXAuth.recoverChipFromCallAuth(DOMAIN_SEPARATOR, auth, signature);
 
         require(chip != address(0), "Invalid chip signature");
 
         return chip;
     }
 
-    /// @notice Get the EIP-712 domain separator
-    /// @return bytes32 The domain separator
+    /// @notice Get the EIP-712 domain separator (chain-agnostic)
+    /// @return bytes32 The chain-agnostic domain separator
     function getDomainSeparator() external view returns (bytes32) {
-        return _domainSeparatorV4();
+        return DOMAIN_SEPARATOR;
     }
 
     /// @notice Allow contract to receive ETH
