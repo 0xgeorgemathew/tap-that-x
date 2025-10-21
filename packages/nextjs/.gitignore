@@ -34,6 +34,9 @@ yarn-error.log*
 .env.production.local
 .env.railway
 
+# SSL certificates
+/certs
+
 # typescript
 *.tsbuildinfo
 ipfs-upload.config.json

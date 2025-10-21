@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { CreditCard, Home, Nfc, Shield } from "lucide-react";
+import { CreditCard, Home, Nfc, Settings, Shield } from "lucide-react";
 
 const navTabs = [
   { path: "/", label: "Home", icon: Home },
   { path: "/register", label: "Register", icon: Nfc },
   { path: "/approve", label: "Approve", icon: Shield },
   { path: "/payment", label: "Payment", icon: CreditCard },
+  { path: "/settings", label: "Settings", icon: Settings },
 ];
 
 export const UnifiedNavigation = () => {

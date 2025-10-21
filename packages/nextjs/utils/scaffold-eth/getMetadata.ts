@@ -23,6 +23,15 @@ export const getMetadata = ({
       template: titleTemplate,
     },
     description: description,
+    manifest: "/manifest.json",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: title,
+    },
+    formatDetection: {
+      telephone: false,
+    },
     openGraph: {
       title: {
         default: title,
@@ -49,7 +58,34 @@ export const getMetadata = ({
           url: "/favicon.svg",
           type: "image/svg+xml",
         },
+        {
+          url: "/favicon.png",
+          type: "image/png",
+          sizes: "192x192",
+        },
       ],
+      apple: [
+        {
+          url: "/favicon.png",
+          sizes: "180x180",
+          type: "image/png",
+        },
+      ],
+    },
+    viewport: {
+      width: "device-width",
+      initialScale: 1,
+      maximumScale: 1,
+      userScalable: false,
+    },
+    other: {
+      "mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-status-bar-style": "default",
+      "apple-mobile-web-app-title": title,
+      "application-name": title,
+      "msapplication-TileColor": "#000000",
+      "theme-color": "#000000",
     },
   };
 };

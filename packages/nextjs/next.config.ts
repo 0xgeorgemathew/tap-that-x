@@ -1,3 +1,4 @@
+import withPWA from "@ducanh2912/next-pwa";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -53,4 +54,13 @@ if (isIpfs) {
   };
 }
 
-export default nextConfig;
+const pwaConfig = withPWA({
+  dest: "public",
+  register: true,
+  workboxOptions: {
+    skipWaiting: true,
+    clientsClaim: true,
+  },
+});
+
+export default pwaConfig(nextConfig);
