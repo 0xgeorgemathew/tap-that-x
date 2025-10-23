@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Settings, Wallet } from "lucide-react";
-import { useAccount, useChainId, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  useReadContract,
+  useSignTypedData,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { UnifiedNavigation } from "~~/components/UnifiedNavigation";
 import deployedContracts from "~~/contracts/deployedContracts";
 import {
@@ -12,7 +19,7 @@ import {
   usdcTransferTemplate,
 } from "~~/utils/actionTemplates";
 
-type FlowState = "idle" | "configuring" | "submitting" | "success" | "error";
+type FlowState = "idle" | "configuring" | "signing" | "submitting" | "success" | "error";
 
 // ERC20 ABI for querying token decimals
 const ERC20_ABI = [
@@ -30,6 +37,7 @@ export default function ConfigurePage() {
   const chainId = useChainId();
   const { writeContract, isPending: isTxPending, data: txHash } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  const { signTypedDataAsync } = useSignTypedData();
 
   const [flowState, setFlowState] = useState<FlowState>("idle");
   const [statusMessage, setStatusMessage] = useState<string>("");
@@ -176,11 +184,47 @@ export default function ConfigurePage() {
         const bridgeDecimals = bridgeToken === "ETH" ? 18 : 6; // ETH: 18, USDC/USDT: 6
         const amountBigInt = formatTokenAmount(amount, bridgeDecimals);
 
+        // Generate deadline (1 year from now)
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60);
+
+        // Prompt user to sign EIP-712 authorization
+        setFlowState("signing");
+        setStatusMessage("Please sign bridge authorization in MetaMask...");
+
+        const signature = await signTypedDataAsync({
+          domain: {
+            name: "TapThatXBridge",
+            version: "1",
+            chainId: BigInt(chainId),
+            verifyingContract: address, // User signs for themselves
+          },
+          types: {
+            BridgeAuthorization: [
+              { name: "token", type: "string" },
+              { name: "amount", type: "uint256" },
+              { name: "destinationChainId", type: "uint256" },
+              { name: "deadline", type: "uint256" },
+            ],
+          },
+          primaryType: "BridgeAuthorization",
+          message: {
+            token: bridgeToken,
+            amount: amountBigInt,
+            destinationChainId: BigInt(destinationChainId),
+            deadline: deadline,
+          },
+        });
+
+        console.log("✅ Bridge authorization signature collected:", signature);
+
+        // Build callData with signature
         callDataResult = template.buildCallData({
           token: bridgeToken,
           amount: amountBigInt,
           destinationChainId: destinationChainId,
           sourceChainId: chainId,
+          deadline: deadline,
+          signature: signature as `0x${string}`,
         });
       } else {
         throw new Error("Template not yet implemented");

@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Wallet, Zap } from "lucide-react";
-import { useAccount, useChainId, usePublicClient } from "wagmi";
+import { decodeFunctionData } from "viem";
+import { useAccount, useChainId, usePublicClient, useWalletClient } from "wagmi";
 import { StepIndicator } from "~~/components/StepIndicator";
 import { UnifiedNavigation } from "~~/components/UnifiedNavigation";
 import deployedContracts from "~~/contracts/deployedContracts";
 import { useGaslessRelay } from "~~/hooks/useGaslessRelay";
 import { useHaloChip } from "~~/hooks/useHaloChip";
+import { executeBridge, initializeWithProvider } from "~~/lib/nexus";
 
 type FlowState = "idle" | "detecting" | "authorizing" | "executing" | "success" | "error";
 
@@ -17,10 +19,14 @@ const EXECUTE_STEPS = [
   { label: "Execute Action", description: "Processing on blockchain", timeEstimate: "10-15 sec" },
 ];
 
+// Bridge identifier constant
+const BRIDGE_IDENTIFIER = "0x0000000000000000000000000000000000000001";
+
 export default function ExecutePage() {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const chainId = useChainId();
+  const { data: walletClient } = useWalletClient();
 
   const contracts = deployedContracts[chainId as keyof typeof deployedContracts] as any;
   const PROTOCOL_ADDRESS = contracts?.TapThatXProtocol?.address;
@@ -38,6 +44,165 @@ export default function ExecutePage() {
 
   const { signMessage, signTypedData, isLoading } = useHaloChip();
   const { relayExecuteTap } = useGaslessRelay();
+
+  const handleBridgeExecution = async (config: {
+    targetContract: string;
+    staticCallData: string;
+    description: string;
+    isActive: boolean;
+  }) => {
+    // Decode bridge parameters from callData
+    let token = "ETH";
+    let amount = 0n;
+    let destinationChainId = 0n;
+    let sourceChainId = 0n;
+    let deadline = 0n;
+    let signature = "0x" as `0x${string}`;
+
+    try {
+      const decodedParams = decodeFunctionData({
+        abi: [
+          {
+            name: "bridgeWithAuth",
+            type: "function",
+            inputs: [
+              { name: "token", type: "string" },
+              { name: "amount", type: "uint256" },
+              { name: "destinationChainId", type: "uint256" },
+              { name: "sourceChainId", type: "uint256" },
+              { name: "deadline", type: "uint256" },
+              { name: "signature", type: "bytes" },
+            ],
+          },
+        ],
+        data: config.staticCallData as `0x${string}`,
+      });
+
+      if (decodedParams.args && Array.isArray(decodedParams.args)) {
+        [token, amount, destinationChainId, sourceChainId, deadline, signature] = decodedParams.args as [
+          string,
+          bigint,
+          bigint,
+          bigint,
+          bigint,
+          `0x${string}`,
+        ];
+      }
+    } catch (error) {
+      console.error("Failed to decode bridge callData:", error);
+      throw new Error("Invalid bridge configuration");
+    }
+
+    // Validate deadline
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (currentTime > Number(deadline)) {
+      throw new Error("Bridge authorization expired. Please reconfigure at /configure.");
+    }
+
+    console.log("🌉 Bridge Parameters:", {
+      token,
+      amount: amount.toString(),
+      destinationChainId: destinationChainId.toString(),
+      sourceChainId: sourceChainId.toString(),
+      deadline: deadline.toString(),
+      signature,
+    });
+
+    // Initialize Nexus SDK
+    setFlowState("executing");
+    setStatusMessage("Initializing Nexus SDK...");
+
+    if (!walletClient) {
+      throw new Error("Wallet client not available");
+    }
+
+    await initializeWithProvider(walletClient);
+
+    // Execute bridge
+    setStatusMessage("Approve transactions in MetaMask (2 popups)...");
+
+    const tokenDecimals = token === "ETH" ? 18 : 6;
+    const amountNumber = Number(amount) / 10 ** tokenDecimals;
+
+    const result = await executeBridge({
+      token: token as "ETH" | "USDC" | "USDT",
+      amount: amountNumber,
+      chainId: Number(destinationChainId),
+    });
+
+    console.log("✅ Bridge execution result:", result);
+
+    setFlowState("success");
+    setStatusMessage(`Success! Bridged ${amountNumber} ${token} to destination chain`);
+  };
+
+  const handleRegularExecution = async (
+    config: {
+      targetContract: string;
+      staticCallData: string;
+      description: string;
+      isActive: boolean;
+    },
+    detectedChipAddress: `0x${string}`,
+  ) => {
+    // Step 2: Authorize execution
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setFlowState("authorizing");
+    setStatusMessage("Tap your chip again to authorize execution...");
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("")}` as `0x${string}`;
+
+    const chipSig = await signTypedData({
+      domain: {
+        name: "TapThatXProtocol",
+        version: "1",
+        verifyingContract: PROTOCOL_ADDRESS,
+      },
+      types: {
+        CallAuthorization: [
+          { name: "owner", type: "address" },
+          { name: "target", type: "address" },
+          { name: "callData", type: "bytes" },
+          { name: "value", type: "uint256" },
+          { name: "timestamp", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+        ],
+      },
+      primaryType: "CallAuthorization",
+      message: {
+        owner: address!,
+        target: config.targetContract as `0x${string}`,
+        callData: config.staticCallData as `0x${string}`,
+        value: BigInt(0),
+        timestamp: BigInt(timestamp),
+        nonce,
+      },
+    });
+
+    setStatusMessage("");
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Step 3: Execute via relayer
+    setFlowState("executing");
+    setStatusMessage("Executing action on blockchain...");
+
+    await relayExecuteTap({
+      owner: address!,
+      chip: detectedChipAddress,
+      chipSignature: chipSig.signature,
+      timestamp,
+      nonce,
+    });
+
+    setStatusMessage("");
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    setFlowState("success");
+    setStatusMessage(`Success! Action executed: ${config.description}`);
+  };
 
   const handleExecute = async () => {
     if (!address || !publicClient) {
@@ -99,63 +264,14 @@ export default function ExecutePage() {
       setActionPreview(config);
       setStatusMessage("");
 
-      // Step 2: Authorize execution
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setFlowState("authorizing");
-      setStatusMessage("Tap your chip again to authorize execution...");
-
-      const timestamp = Math.floor(Date.now() / 1000);
-      const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("")}` as `0x${string}`;
-
-      const chipSig = await signTypedData({
-        domain: {
-          name: "TapThatXProtocol",
-          version: "1",
-          verifyingContract: PROTOCOL_ADDRESS,
-        },
-        types: {
-          CallAuthorization: [
-            { name: "owner", type: "address" },
-            { name: "target", type: "address" },
-            { name: "callData", type: "bytes" },
-            { name: "value", type: "uint256" },
-            { name: "timestamp", type: "uint256" },
-            { name: "nonce", type: "bytes32" },
-          ],
-        },
-        primaryType: "CallAuthorization",
-        message: {
-          owner: address,
-          target: config.targetContract as `0x${string}`,
-          callData: config.staticCallData as `0x${string}`,
-          value: BigInt(0),
-          timestamp: BigInt(timestamp),
-          nonce,
-        },
-      });
-
-      setStatusMessage("");
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Step 3: Execute via relayer
-      setFlowState("executing");
-      setStatusMessage("Executing action on blockchain...");
-
-      await relayExecuteTap({
-        owner: address,
-        chip: detectedChipAddress,
-        chipSignature: chipSig.signature,
-        timestamp,
-        nonce,
-      });
-
-      setStatusMessage("");
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      setFlowState("success");
-      setStatusMessage(`Success! Action executed: ${config.description}`);
+      // Check if this is a bridge action
+      if (config.targetContract.toLowerCase() === BRIDGE_IDENTIFIER.toLowerCase()) {
+        // Bridge action - decode parameters and execute via Nexus SDK
+        await handleBridgeExecution(config);
+      } else {
+        // Regular action - execute via gasless relay
+        await handleRegularExecution(config, detectedChipAddress);
+      }
     } catch (err) {
       console.error("Execution failed:", err);
       setFlowState("error");

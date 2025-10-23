@@ -133,20 +133,28 @@ export const uniswapSwapTemplate: ActionTemplate = {
 /**
  * Avail Bridge Template
  * For cross-chain ETH/token bridging via Avail Nexus SDK
- * Note: The callData stores bridge parameters but execution happens client-side via Nexus SDK
+ * Note: The callData stores bridge parameters + EIP-712 signature for authorization
+ * Option 1 (Hybrid): User signs authorization during config, replays during execution
  */
 export const bridgeTemplate: ActionTemplate = {
   id: "avail-bridge",
   name: "Avail Bridge",
   description: "Bridge tokens to another chain (e.g., fuel Optimism gas)",
   category: "defi",
-  buildCallData: (params: { token: string; amount: bigint; destinationChainId: number; sourceChainId?: number }) => {
-    // Encode bridge parameters as callData for on-chain storage
-    // This gets decoded later by the execute-bridge page
+  buildCallData: (params: {
+    token: string;
+    amount: bigint;
+    destinationChainId: number;
+    sourceChainId?: number;
+    deadline: bigint;
+    signature: `0x${string}`;
+  }) => {
+    // Encode bridge parameters + signature as callData for on-chain storage
+    // This gets decoded later by the execute page
     const callData = encodeFunctionData({
       abi: [
         {
-          name: "bridgeToken",
+          name: "bridgeWithAuth",
           type: "function",
           stateMutability: "nonpayable",
           inputs: [
@@ -154,15 +162,24 @@ export const bridgeTemplate: ActionTemplate = {
             { name: "amount", type: "uint256" },
             { name: "destinationChainId", type: "uint256" },
             { name: "sourceChainId", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+            { name: "signature", type: "bytes" },
           ],
           outputs: [],
         },
       ],
-      functionName: "bridgeToken",
-      args: [params.token, params.amount, BigInt(params.destinationChainId), BigInt(params.sourceChainId || 0)],
+      functionName: "bridgeWithAuth",
+      args: [
+        params.token,
+        params.amount,
+        BigInt(params.destinationChainId),
+        BigInt(params.sourceChainId || 0),
+        params.deadline,
+        params.signature,
+      ],
     });
 
-    // Dummy target address (not used for actual execution)
+    // Bridge identifier address (special marker for bridge actions)
     return {
       target: "0x0000000000000000000000000000000000000001" as `0x${string}`,
       callData,
