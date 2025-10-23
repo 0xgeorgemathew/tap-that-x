@@ -42,6 +42,9 @@ export default function ConfigurePage() {
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [tokenDecimals, setTokenDecimals] = useState<number>(18); // Default to 18 decimals
+  // Form fields for Bridge action
+  const [bridgeToken, setBridgeToken] = useState<string>("ETH");
+  const [destinationChainId, setDestinationChainId] = useState<number>(11155420); // Default: Optimism Sepolia
 
   const contracts = deployedContracts[chainId as keyof typeof deployedContracts] as any;
   const registryAddress = contracts?.TapThatXRegistry?.address;
@@ -164,12 +167,41 @@ export default function ConfigurePage() {
           to: recipient as `0x${string}`,
           amount: amountBigInt,
         });
+      } else if (template.id === "avail-bridge") {
+        if (!bridgeToken || !amount || !destinationChainId) {
+          throw new Error("Please fill in all bridge fields");
+        }
+
+        // For bridge, token decimals depend on the selected token
+        const bridgeDecimals = bridgeToken === "ETH" ? 18 : 6; // ETH: 18, USDC/USDT: 6
+        const amountBigInt = formatTokenAmount(amount, bridgeDecimals);
+
+        callDataResult = template.buildCallData({
+          token: bridgeToken,
+          amount: amountBigInt,
+          destinationChainId: destinationChainId,
+          sourceChainId: chainId,
+        });
       } else {
         throw new Error("Template not yet implemented");
       }
 
-      const finalDescription =
-        description || `Send ${amount} tokens to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+      // Generate description based on template type
+      let finalDescription = description;
+      if (!finalDescription) {
+        if (template.id === "avail-bridge") {
+          const chainNames: Record<number, string> = {
+            11155420: "Optimism Sepolia",
+            84532: "Base Sepolia",
+            421614: "Arbitrum Sepolia",
+            80002: "Polygon Amoy",
+          };
+          const destChainName = chainNames[destinationChainId] || `Chain ${destinationChainId}`;
+          finalDescription = `Bridge ${amount} ${bridgeToken} to ${destChainName}`;
+        } else {
+          finalDescription = `Send ${amount} tokens to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+        }
+      }
 
       setFlowState("submitting");
       setStatusMessage("Please confirm the transaction in your wallet...");
@@ -349,6 +381,83 @@ export default function ConfigurePage() {
                       <p className="text-xs text-base-content/70 mt-1">
                         You must approve TapThatXProtocol ({protocolAddress?.slice(0, 6)}...
                         {protocolAddress?.slice(-4)}) to spend your tokens before executing taps.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Bridge Action Form */}
+              {selectedTemplate === "avail-bridge" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Token to Bridge</label>
+                    <select
+                      value={bridgeToken}
+                      onChange={e => setBridgeToken(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="ETH">ETH (Ethereum)</option>
+                      <option value="USDC">USDC (USD Coin)</option>
+                      <option value="USDT">USDT (Tether)</option>
+                    </select>
+                    <p className="text-xs text-base-content/50 mt-1">
+                      Select the token you want to bridge across chains
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Destination Chain</label>
+                    <select
+                      value={destinationChainId}
+                      onChange={e => setDestinationChainId(Number(e.target.value))}
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="11155420">Optimism Sepolia</option>
+                      <option value="84532">Base Sepolia</option>
+                      <option value="421614">Arbitrum Sepolia</option>
+                      <option value="80002">Polygon Amoy</option>
+                    </select>
+                    <p className="text-xs text-base-content/50 mt-1">
+                      Where do you want to receive the bridged tokens?
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Amount to Bridge</label>
+                    <input
+                      type="text"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      placeholder="0.05"
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <p className="text-xs text-base-content/50 mt-1">
+                      {bridgeToken === "ETH"
+                        ? "Amount in ETH (e.g., 0.05 for fueling gas)"
+                        : `Amount in ${bridgeToken}`}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Description (optional)</label>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="e.g., Fuel Optimism gas"
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+
+                  {/* Important Note about Bridge */}
+                  <div className="glass-alert">
+                    <AlertCircle className="h-5 w-5 text-info" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-base-content">About Tap-to-Bridge</p>
+                      <p className="text-xs text-base-content/70 mt-1">
+                        Bridge execution uses Avail Nexus SDK. You&apos;ll need to confirm the bridge transaction in
+                        your wallet when you tap to execute. Gas fees apply on both source and destination chains.
                       </p>
                     </div>
                   </div>
