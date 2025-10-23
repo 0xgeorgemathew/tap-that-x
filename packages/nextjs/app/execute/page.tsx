@@ -264,11 +264,21 @@ export default function ExecutePage() {
       setActionPreview(config);
       setStatusMessage("");
 
+      // Debug logging
+      console.log("📋 Configuration loaded:", {
+        targetContract: config.targetContract,
+        description: config.description,
+        isBridgeAction: config.targetContract.toLowerCase() === BRIDGE_IDENTIFIER.toLowerCase(),
+        BRIDGE_IDENTIFIER,
+      });
+
       // Check if this is a bridge action
       if (config.targetContract.toLowerCase() === BRIDGE_IDENTIFIER.toLowerCase()) {
+        console.log("🌉 Detected bridge action - executing via Nexus SDK");
         // Bridge action - decode parameters and execute via Nexus SDK
         await handleBridgeExecution(config);
       } else {
+        console.log("💸 Detected regular action - executing via gasless relay");
         // Regular action - execute via gasless relay
         await handleRegularExecution(config, detectedChipAddress);
       }
