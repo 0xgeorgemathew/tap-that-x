@@ -14,9 +14,7 @@ contract USDCTapPayment is ReentrancyGuard {
     TapThatXProtocol public immutable protocol;
     TapThatXRegistry public immutable registry;
 
-    event TapPaymentExecuted(
-        address indexed owner,  bytes32 nonce
-    );
+    event TapPaymentExecuted(address indexed owner, bytes32 nonce);
 
     constructor(address _usdc, address _protocol, address _registry) {
         require(_usdc != address(0), "Invalid USDC address");
@@ -58,9 +56,7 @@ contract USDCTapPayment is ReentrancyGuard {
 
         require(success, "Protocol execution failed");
 
-       
-
-        emit TapPaymentExecuted(owner,nonce);
+        emit TapPaymentExecuted(owner, nonce);
     }
 
     /// @notice Helper to check if owner has approved sufficient USDC

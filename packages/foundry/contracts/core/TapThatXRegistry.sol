@@ -16,8 +16,7 @@ contract TapThatXRegistry is Ownable, ReentrancyGuard, EIP712 {
     mapping(address => address[]) private chipToOwners;
     mapping(address => mapping(address => bool)) public ownerHasChip;
 
-    bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("ChipRegistration(address owner,address chipAddress)");
+    bytes32 private constant REGISTRATION_TYPEHASH = keccak256("ChipRegistration(address owner,address chipAddress)");
 
     event ChipRegistered(address indexed chip, address indexed owner);
 

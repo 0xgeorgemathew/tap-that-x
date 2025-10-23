@@ -41,13 +41,8 @@ contract TapThatXTest is Test {
     /// @notice Test chip registration
     function testRegisterChip() public {
         // Create registration signature
-        bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256("ChipRegistration(address owner,address chipAddress)"),
-                owner,
-                chipAddress
-            )
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(keccak256("ChipRegistration(address owner,address chipAddress)"), owner, chipAddress));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", registry.getChainAgnosticDomainSeparator(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(chipPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
@@ -71,11 +66,7 @@ contract TapThatXTest is Test {
         address newOwner = vm.addr(2);
 
         bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256("ChipRegistration(address owner,address chipAddress)"),
-                newOwner,
-                chipAddress
-            )
+            abi.encode(keccak256("ChipRegistration(address owner,address chipAddress)"), newOwner, chipAddress)
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", registry.getChainAgnosticDomainSeparator(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(chipPrivateKey, digest);
@@ -143,12 +134,7 @@ contract TapThatXTest is Test {
         testExecuteAuthorizedCall();
 
         // Try to replay with same nonce
-        bytes memory callData = abi.encodeWithSelector(
-            usdc.transferFrom.selector,
-            owner,
-            merchant,
-            100 * 10 ** 6
-        );
+        bytes memory callData = abi.encodeWithSelector(usdc.transferFrom.selector, owner, merchant, 100 * 10 ** 6);
         bytes32 nonce = keccak256(abi.encodePacked(block.timestamp, owner, merchant));
         uint256 timestamp = block.timestamp;
 
@@ -183,12 +169,7 @@ contract TapThatXTest is Test {
         vm.prank(owner);
         usdc.approve(address(protocol), 1000 * 10 ** 6);
 
-        bytes memory callData = abi.encodeWithSelector(
-            usdc.transferFrom.selector,
-            owner,
-            merchant,
-            100 * 10 ** 6
-        );
+        bytes memory callData = abi.encodeWithSelector(usdc.transferFrom.selector, owner, merchant, 100 * 10 ** 6);
 
         bytes32 nonce = keccak256(abi.encodePacked(block.timestamp, owner, merchant));
         uint256 timestamp = block.timestamp - 301; // 301 seconds ago (expired)
@@ -220,12 +201,7 @@ contract TapThatXTest is Test {
         vm.prank(owner);
         usdc.approve(address(protocol), 1000 * 10 ** 6);
 
-        bytes memory callData = abi.encodeWithSelector(
-            usdc.transferFrom.selector,
-            owner,
-            merchant,
-            100 * 10 ** 6
-        );
+        bytes memory callData = abi.encodeWithSelector(usdc.transferFrom.selector, owner, merchant, 100 * 10 ** 6);
 
         bytes32 nonce = keccak256(abi.encodePacked(block.timestamp, owner, merchant));
         uint256 timestamp = block.timestamp;
@@ -311,12 +287,7 @@ contract TapThatXTest is Test {
         );
 
         vm.prank(owner);
-        configuration.setConfiguration(
-            chipAddress,
-            address(usdc),
-            callData,
-            "Send 50 USDC to merchant"
-        );
+        configuration.setConfiguration(chipAddress, address(usdc), callData, "Send 50 USDC to merchant");
 
         // Verify configuration
         TapThatXConfiguration.ActionConfig memory config = configuration.getConfiguration(owner, chipAddress);
@@ -331,12 +302,7 @@ contract TapThatXTest is Test {
     function testOnlyOwnerCanSetConfiguration() public {
         testRegisterChip();
 
-        bytes memory callData = abi.encodeWithSelector(
-            usdc.transferFrom.selector,
-            owner,
-            merchant,
-            50 * 10 ** 6
-        );
+        bytes memory callData = abi.encodeWithSelector(usdc.transferFrom.selector, owner, merchant, 50 * 10 ** 6);
 
         // Try to set configuration from non-owner
         address nonOwner = vm.addr(999);
@@ -438,12 +404,7 @@ contract TapThatXTest is Test {
         configuration.toggleConfiguration(chipAddress);
 
         // Try to execute
-        bytes memory callData = abi.encodeWithSelector(
-            usdc.transferFrom.selector,
-            owner,
-            merchant,
-            50 * 10 ** 6
-        );
+        bytes memory callData = abi.encodeWithSelector(usdc.transferFrom.selector, owner, merchant, 50 * 10 ** 6);
         bytes32 nonce = keccak256(abi.encodePacked(block.timestamp, "new-nonce"));
         uint256 timestamp = block.timestamp;
 

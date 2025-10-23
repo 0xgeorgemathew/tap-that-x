@@ -73,8 +73,6 @@ contract TapThatXProtocol is EIP712, ReentrancyGuard {
 
         emit AuthorizedCallExecuted(owner, chip, target, callData, value, nonce, success);
 
-
-
         return (success, returnData);
     }
 
@@ -120,9 +118,7 @@ contract TapThatXProtocol is EIP712, ReentrancyGuard {
         });
 
         // Validate timestamp
-        require(
-            TapThatXAuth.validateTimestamp(timestamp, MAX_TIMESTAMP_WINDOW), "Authorization expired"
-        );
+        require(TapThatXAuth.validateTimestamp(timestamp, MAX_TIMESTAMP_WINDOW), "Authorization expired");
 
         // Recover chip address from signature (chain-agnostic)
         address chip = TapThatXAuth.recoverChipFromCallAuth(_chainAgnosticDomainSeparator(), auth, signature);

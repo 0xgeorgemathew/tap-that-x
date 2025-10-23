@@ -37,13 +37,11 @@ contract TapThatXExecutor is ReentrancyGuard {
     /// @param nonce Unique nonce for replay protection
     /// @return success Whether the execution succeeded
     /// @return returnData The return data from the call
-    function executeTap(
-        address owner,
-        address chip,
-        bytes memory chipSignature,
-        uint256 timestamp,
-        bytes32 nonce
-    ) external nonReentrant returns (bool success, bytes memory returnData) {
+    function executeTap(address owner, address chip, bytes memory chipSignature, uint256 timestamp, bytes32 nonce)
+        external
+        nonReentrant
+        returns (bool success, bytes memory returnData)
+    {
         require(owner != address(0), "Invalid owner");
         require(chip != address(0), "Invalid chip");
 

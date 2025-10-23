@@ -12,12 +12,12 @@ library TapThatXAuth {
     /// @notice Generic authorization for any contract call
     /// @dev Used by TapThatXProtocol for executing arbitrary authorized calls
     struct CallAuthorization {
-        address owner;      // The chip owner (must match msg.sender in protocol)
-        address target;     // Contract address to call
-        bytes callData;     // Encoded function call
-        uint256 value;      // ETH value to send (0 for no ETH)
-        uint256 timestamp;  // When authorization was created
-        bytes32 nonce;      // Unique nonce for replay protection
+        address owner; // The chip owner (must match msg.sender in protocol)
+        address target; // Contract address to call
+        bytes callData; // Encoded function call
+        uint256 value; // ETH value to send (0 for no ETH)
+        uint256 timestamp; // When authorization was created
+        bytes32 nonce; // Unique nonce for replay protection
     }
 
     /// @notice Legacy payment authorization (kept for reference/backwards compatibility)
@@ -61,7 +61,13 @@ library TapThatXAuth {
     {
         bytes32 structHash = keccak256(
             abi.encode(
-                CALL_AUTH_TYPEHASH, auth.owner, auth.target, keccak256(auth.callData), auth.value, auth.timestamp, auth.nonce
+                CALL_AUTH_TYPEHASH,
+                auth.owner,
+                auth.target,
+                keccak256(auth.callData),
+                auth.value,
+                auth.timestamp,
+                auth.nonce
             )
         );
 
