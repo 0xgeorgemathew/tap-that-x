@@ -196,7 +196,7 @@ export default function ConfigurePage() {
             name: "TapThatXBridge",
             version: "1",
             chainId: BigInt(chainId),
-            verifyingContract: address, // User signs for themselves
+            verifyingContract: configurationAddress, // Use configuration contract as verifier
           },
           types: {
             BridgeAuthorization: [
