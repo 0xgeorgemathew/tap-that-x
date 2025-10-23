@@ -131,6 +131,46 @@ export const uniswapSwapTemplate: ActionTemplate = {
 };
 
 /**
+ * Avail Bridge Template
+ * For cross-chain ETH/token bridging via Avail Nexus SDK
+ * Note: The callData stores bridge parameters but execution happens client-side via Nexus SDK
+ */
+export const bridgeTemplate: ActionTemplate = {
+  id: "avail-bridge",
+  name: "Avail Bridge",
+  description: "Bridge tokens to another chain (e.g., fuel Optimism gas)",
+  category: "defi",
+  buildCallData: (params: { token: string; amount: bigint; destinationChainId: number; sourceChainId?: number }) => {
+    // Encode bridge parameters as callData for on-chain storage
+    // This gets decoded later by the execute-bridge page
+    const callData = encodeFunctionData({
+      abi: [
+        {
+          name: "bridgeToken",
+          type: "function",
+          stateMutability: "nonpayable",
+          inputs: [
+            { name: "token", type: "string" },
+            { name: "amount", type: "uint256" },
+            { name: "destinationChainId", type: "uint256" },
+            { name: "sourceChainId", type: "uint256" },
+          ],
+          outputs: [],
+        },
+      ],
+      functionName: "bridgeToken",
+      args: [params.token, params.amount, BigInt(params.destinationChainId), BigInt(params.sourceChainId || 0)],
+    });
+
+    // Dummy target address (not used for actual execution)
+    return {
+      target: "0x0000000000000000000000000000000000000001" as `0x${string}`,
+      callData,
+    };
+  },
+};
+
+/**
  * Custom Action Template
  * For advanced users to input their own callData
  */
@@ -154,6 +194,7 @@ export const actionTemplates: ActionTemplate[] = [
   usdcTransferTemplate,
   erc20TransferTemplate,
   uniswapSwapTemplate,
+  bridgeTemplate,
   customActionTemplate,
 ];
 
