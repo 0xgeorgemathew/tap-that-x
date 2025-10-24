@@ -3,13 +3,20 @@
 import { useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Wallet, Zap } from "lucide-react";
 import { decodeFunctionData } from "viem";
-import { useAccount, useChainId, usePublicClient, useWalletClient } from "wagmi";
+import { useAccount, useChainId, usePublicClient } from "wagmi";
 import { StepIndicator } from "~~/components/StepIndicator";
 import { UnifiedNavigation } from "~~/components/UnifiedNavigation";
 import deployedContracts from "~~/contracts/deployedContracts";
 import { useGaslessRelay } from "~~/hooks/useGaslessRelay";
 import { useHaloChip } from "~~/hooks/useHaloChip";
 import { executeBridge, initializeWithProvider } from "~~/lib/nexus";
+
+// Extend Window interface for MetaMask
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 type FlowState = "idle" | "detecting" | "authorizing" | "executing" | "success" | "error";
 
@@ -26,7 +33,6 @@ export default function ExecutePage() {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const chainId = useChainId();
-  const { data: walletClient } = useWalletClient();
 
   const contracts = deployedContracts[chainId as keyof typeof deployedContracts] as any;
   const PROTOCOL_ADDRESS = contracts?.TapThatXProtocol?.address;
@@ -112,11 +118,14 @@ export default function ExecutePage() {
     setFlowState("executing");
     setStatusMessage("Initializing Nexus SDK...");
 
-    if (!walletClient) {
-      throw new Error("Wallet client not available");
+    // Use window.ethereum instead of wagmi walletClient
+    // Nexus SDK expects a raw EIP-1193 provider
+    if (typeof window === "undefined" || !window.ethereum) {
+      throw new Error("MetaMask not available. Please install MetaMask to use bridge.");
     }
 
-    await initializeWithProvider(walletClient);
+    console.log("🔌 Initializing Nexus SDK with window.ethereum provider");
+    await initializeWithProvider(window.ethereum);
 
     // Execute bridge
     setStatusMessage("Approve transactions in MetaMask (2 popups)...");
