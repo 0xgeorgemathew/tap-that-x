@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Wallet, Zap } from "lucide-react";
 import { decodeFunctionData } from "viem";
 import { useAccount, useChainId, usePublicClient } from "wagmi";
@@ -50,6 +50,60 @@ export default function ExecutePage() {
 
   const { signMessage, signTypedData, isLoading } = useHaloChip();
   const { relayExecuteTap } = useGaslessRelay();
+
+  // Check for pending bridge execution from Safari NFC tap
+  useEffect(() => {
+    const checkPendingBridge = async () => {
+      const pendingBridgeData = sessionStorage.getItem("pendingBridge");
+      if (!pendingBridgeData || !address) return;
+
+      try {
+        const bridgeParams = JSON.parse(pendingBridgeData);
+        console.log("🔄 Resuming bridge execution from Safari tap:", bridgeParams);
+
+        // Clear the pending data
+        sessionStorage.removeItem("pendingBridge");
+
+        // Manually trigger bridge execution with stored params
+        await handleBridgeExecutionDirect(bridgeParams);
+      } catch (err) {
+        console.error("Failed to resume bridge:", err);
+        setFlowState("error");
+        setStatusMessage(`Failed to resume bridge: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    };
+
+    checkPendingBridge();
+  }, [address]); // Only run when address changes (wallet connected)
+
+  const handleBridgeExecutionDirect = async (params: any) => {
+    const { token, amount, destinationChainId } = params;
+
+    setFlowState("executing");
+    setStatusMessage("Initializing Nexus SDK...");
+
+    if (typeof window === "undefined" || !window.ethereum) {
+      throw new Error("MetaMask not available in this browser");
+    }
+
+    await initializeWithProvider(window.ethereum);
+
+    setStatusMessage("Approve transactions in MetaMask (2 popups)...");
+
+    const tokenDecimals = token === "ETH" ? 18 : 6;
+    const amountNumber = Number(amount) / 10 ** tokenDecimals;
+
+    const result = await executeBridge({
+      token: token as "ETH" | "USDC" | "USDT",
+      amount: amountNumber,
+      chainId: Number(destinationChainId),
+    });
+
+    console.log("✅ Bridge execution result:", result);
+
+    setFlowState("success");
+    setStatusMessage(`Success! Bridged ${amountNumber} ${token} to destination chain`);
+  };
 
   const handleBridgeExecution = async (config: {
     targetContract: string;
@@ -137,11 +191,30 @@ export default function ExecutePage() {
     }
 
     if (!provider) {
-      throw new Error(
-        "No Web3 provider available. Please either:\n" +
-          "1. Open in MetaMask app browser (tap Browser tab in MetaMask)\n" +
-          "2. Use desktop with MetaMask extension installed",
-      );
+      // Mobile workflow: Redirect to MetaMask browser with bridge params
+      const bridgeParams = {
+        token,
+        amount: amount.toString(),
+        destinationChainId: destinationChainId.toString(),
+        sourceChainId: sourceChainId.toString(),
+        deadline: deadline.toString(),
+        signature,
+        owner: address,
+      };
+
+      // Store params in sessionStorage for MetaMask browser to pick up
+      sessionStorage.setItem("pendingBridge", JSON.stringify(bridgeParams));
+
+      // Build MetaMask deep link
+      const currentUrl = window.location.href;
+      const metamaskUrl = `https://metamask.app.link/dapp/${currentUrl.replace(/^https?:\/\//, "")}`;
+
+      setStatusMessage("Redirecting to MetaMask browser...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Redirect to MetaMask browser
+      window.location.href = metamaskUrl;
+      return;
     }
 
     console.log("🔌 Initializing Nexus SDK with provider:", provider);
