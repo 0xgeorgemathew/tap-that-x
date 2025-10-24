@@ -30,7 +30,7 @@ const EXECUTE_STEPS = [
 const BRIDGE_IDENTIFIER = "0x0000000000000000000000000000000000000001";
 
 export default function ExecutePage() {
-  const { address } = useAccount();
+  const { address, connector } = useAccount();
   const publicClient = usePublicClient();
   const chainId = useChainId();
 
@@ -118,14 +118,34 @@ export default function ExecutePage() {
     setFlowState("executing");
     setStatusMessage("Initializing Nexus SDK...");
 
-    // Use window.ethereum instead of wagmi walletClient
-    // Nexus SDK expects a raw EIP-1193 provider
-    if (typeof window === "undefined" || !window.ethereum) {
-      throw new Error("MetaMask not available. Please install MetaMask to use bridge.");
+    // Try to get provider from multiple sources (desktop + mobile support)
+    let provider: any = null;
+
+    // 1. Try window.ethereum (MetaMask extension on desktop, or MetaMask in-app browser)
+    if (typeof window !== "undefined" && window.ethereum) {
+      provider = window.ethereum;
+      console.log("🔌 Using window.ethereum provider (MetaMask extension or in-app browser)");
+    }
+    // 2. Try to get provider from wagmi connector (WalletConnect, MetaMask Mobile)
+    else if (connector) {
+      try {
+        provider = await connector.getProvider();
+        console.log("🔌 Using connector provider (WalletConnect/Mobile wallet)");
+      } catch (err) {
+        console.error("Failed to get provider from connector:", err);
+      }
     }
 
-    console.log("🔌 Initializing Nexus SDK with window.ethereum provider");
-    await initializeWithProvider(window.ethereum);
+    if (!provider) {
+      throw new Error(
+        "No Web3 provider available. Please either:\n" +
+          "1. Open in MetaMask app browser (tap Browser tab in MetaMask)\n" +
+          "2. Use desktop with MetaMask extension installed",
+      );
+    }
+
+    console.log("🔌 Initializing Nexus SDK with provider:", provider);
+    await initializeWithProvider(provider);
 
     // Execute bridge
     setStatusMessage("Approve transactions in MetaMask (2 popups)...");
