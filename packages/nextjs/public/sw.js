@@ -22,8 +22,8 @@ self.addEventListener("push", event => {
 
     // Show notification
     event.waitUntil(self.registration.showNotification(title, options));
-  } catch (error) {
-    console.error("[SW] Error in push handler:", error);
+  } catch {
+    // Silently fail - user won't receive notification but won't break the app
   }
 });
 
