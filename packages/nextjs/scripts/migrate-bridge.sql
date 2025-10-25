@@ -15,12 +15,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 CREATE INDEX idx_push_user ON push_subscriptions(user_address);
 
 -- ============================================================================
--- Bridge Requests Table 
+-- Bridge Requests Table
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS bridge_requests (
   id SERIAL PRIMARY KEY,
   request_id VARCHAR(66) NOT NULL UNIQUE,
   user_address VARCHAR(42) NOT NULL,
+  chip_address VARCHAR(42) NOT NULL,
   source_chain INTEGER NOT NULL,
   dest_chain INTEGER NOT NULL,
   token_address VARCHAR(42) NOT NULL,
