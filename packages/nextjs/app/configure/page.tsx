@@ -43,6 +43,11 @@ export default function ConfigurePage() {
   const [description, setDescription] = useState<string>("");
   const [tokenDecimals, setTokenDecimals] = useState<number>(18); // Default to 18 decimals
 
+  // Form fields for bridge
+  const [sourceChainId, setSourceChainId] = useState<number>(chainId);
+  const [destChainId, setDestChainId] = useState<number>(0);
+  const [bridgeAmount, setBridgeAmount] = useState<string>("");
+
   const contracts = deployedContracts[chainId as keyof typeof deployedContracts] as any;
   const registryAddress = contracts?.TapThatXRegistry?.address;
   const registryAbi = contracts?.TapThatXRegistry?.abi;
@@ -164,12 +169,30 @@ export default function ConfigurePage() {
           to: recipient as `0x${string}`,
           amount: amountBigInt,
         });
+      } else if (template.id === "avail-bridge") {
+        if (!bridgeAmount || destChainId === 0) {
+          throw new Error("Please fill in bridge amount and destination chain");
+        }
+
+        // Convert ETH to wei (18 decimals)
+        const amountBigInt = formatTokenAmount(bridgeAmount, 18);
+        callDataResult = template.buildCallData({
+          sourceChainId,
+          destChainId,
+          amount: amountBigInt,
+        });
       } else {
         throw new Error("Template not yet implemented");
       }
 
-      const finalDescription =
-        description || `Send ${amount} tokens to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+      let finalDescription = description;
+      if (!finalDescription) {
+        if (template.id === "avail-bridge") {
+          finalDescription = `Bridge ${bridgeAmount} ETH to chain ${destChainId}`;
+        } else {
+          finalDescription = `Send ${amount} tokens to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+        }
+      }
 
       setFlowState("submitting");
       setStatusMessage("Please confirm the transaction in your wallet...");
@@ -349,6 +372,78 @@ export default function ConfigurePage() {
                       <p className="text-xs text-base-content/70 mt-1">
                         You must approve TapThatXProtocol ({protocolAddress?.slice(0, 6)}...
                         {protocolAddress?.slice(-4)}) to spend your tokens before executing taps.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Bridge Template Fields */}
+              {selectedTemplate === "avail-bridge" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Source Chain</label>
+                    <select
+                      value={sourceChainId}
+                      onChange={e => setSourceChainId(Number(e.target.value))}
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value={11155111}>Ethereum Sepolia</option>
+                      <option value={84532}>Base Sepolia</option>
+                      <option value={80002}>Polygon Amoy</option>
+                      <option value={421614}>Arbitrum Sepolia</option>
+                      <option value={11155420}>Optimism Sepolia</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Destination Chain</label>
+                    <select
+                      value={destChainId}
+                      onChange={e => setDestChainId(Number(e.target.value))}
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value={0}>Select destination chain</option>
+                      <option value={11155111}>Ethereum Sepolia</option>
+                      <option value={84532}>Base Sepolia</option>
+                      <option value={80002}>Polygon Amoy</option>
+                      <option value={421614}>Arbitrum Sepolia</option>
+                      <option value={11155420}>Optimism Sepolia</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Amount (ETH)</label>
+                    <input
+                      type="text"
+                      value={bridgeAmount}
+                      onChange={e => setBridgeAmount(e.target.value)}
+                      placeholder="0.1"
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-base-content mb-2">Description (optional)</label>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="e.g., Bridge 0.1 ETH to Base"
+                      className="w-full px-4 py-3 rounded-lg bg-base-200/50 border border-base-300/50 text-base-content focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+
+                  {/* Important Note about Bridge */}
+                  <div className="glass-alert">
+                    <AlertCircle className="h-5 w-5 text-info" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-base-content">Desktop Approval Required</p>
+                      <p className="text-xs text-base-content/70 mt-1">
+                        Bridge actions require desktop approval. Set up push notifications at{" "}
+                        <a href="/bridge/setup" className="underline">
+                          /bridge/setup
+                        </a>
                       </p>
                     </div>
                   </div>
