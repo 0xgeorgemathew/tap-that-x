@@ -1,160 +1,77 @@
-import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
-
-/**
- * Database Utility for TapThat X
- * Manages PostgreSQL connection pool for push subscriptions and bridge requests
- */
+import { Pool } from "pg";
 
 let pool: Pool | null = null;
 
 /**
- * Get or create database connection pool
+ * Get or create a PostgreSQL connection pool
  * Uses DATABASE_URL environment variable
  */
 export function getDbPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
-
-    if (!connectionString) {
+    if (!process.env.DATABASE_URL) {
       throw new Error("DATABASE_URL environment variable is not set");
     }
 
     pool = new Pool({
-      connectionString,
-      // Use SSL in production (Railway, Heroku, etc.)
+      connectionString: process.env.DATABASE_URL,
       ssl:
         process.env.NODE_ENV === "production"
           ? {
               rejectUnauthorized: false,
             }
           : undefined,
-      // Connection pool settings
-      max: 20, // Maximum connections
-      idleTimeoutMillis: 30000, // Close idle connections after 30s
-      connectionTimeoutMillis: 10000, // Wait 10s for connection
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 10000, // Increased to 10 seconds
+      query_timeout: 10000, // Query timeout 10 seconds
+      statement_timeout: 10000, // Statement timeout 10 seconds
     });
 
-    // Log pool errors
-    pool.on("error", (err: Error) => {
-      console.error("Unexpected database pool error:", err);
+    // Handle pool errors
+    pool.on("error", () => {
+      // Silent - errors are handled in query function
     });
-
-    console.log("✓ Database connection pool initialized");
   }
 
   return pool;
 }
 
 /**
- * Execute a SQL query
+ * Execute a SQL query with retry logic
  * @param text SQL query string
- * @param params Query parameters (optional)
+ * @param params Query parameters
+ * @param retries Number of retries (default: 3)
  * @returns Query result
  */
-export async function query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
+export async function query(text: string, params?: any[], retries = 3): Promise<any> {
   const pool = getDbPool();
-  const start = Date.now();
 
-  try {
-    const result = await pool.query<T>(text, params);
-    const duration = Date.now() - start;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await pool.query(text, params);
+      return result;
+    } catch (error: any) {
+      // If connection error and we have retries left, reset pool and try again
+      if (attempt < retries && (error.message.includes("timeout") || error.message.includes("terminated"))) {
+        await closePool();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        continue;
+      }
 
-    // Log slow queries (>1s)
-    if (duration > 1000) {
-      console.warn(`Slow query (${duration}ms):`, text.substring(0, 100));
+      throw error;
     }
-
-    return result;
-  } catch (error) {
-    console.error("Database query error:", error);
-    console.error("Query:", text);
-    console.error("Params:", params);
-    throw error;
   }
+
+  throw new Error("Query failed after all retries");
 }
 
 /**
- * Get a client from the pool for transactions
- * Remember to call client.release() when done!
- */
-export async function getClient(): Promise<PoolClient> {
-  const pool = getDbPool();
-  return await pool.connect();
-}
-
-/**
- * Execute a function within a database transaction
- * Automatically commits on success, rolls back on error
- *
- * @param callback Function to execute within transaction
- * @returns Result of callback function
- */
-export async function transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await getClient();
-
-  try {
-    await client.query("BEGIN");
-    const result = await callback(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Close the database connection pool
- * Call this when shutting down the application
+ * Close the database pool
+ * Call this on application shutdown
  */
 export async function closePool(): Promise<void> {
   if (pool) {
     await pool.end();
     pool = null;
-    console.log("✓ Database connection pool closed");
   }
-}
-
-/**
- * Test database connection
- * @returns true if connection successful
- */
-export async function testConnection(): Promise<boolean> {
-  try {
-    const result = await query("SELECT NOW() as current_time");
-    console.log("✓ Database connection successful:", result.rows[0].current_time);
-    return true;
-  } catch (error) {
-    console.error("✗ Database connection failed:", error);
-    return false;
-  }
-}
-
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-export interface PushSubscription {
-  id: number;
-  user_address: string;
-  subscription_endpoint: string;
-  subscription_keys: {
-    p256dh: string;
-    auth: string;
-  };
-  created_at: Date;
-}
-
-export interface BridgeRequest {
-  id: number;
-  request_id: string;
-  user_address: string;
-  source_chain: number;
-  dest_chain: number;
-  token_address: string;
-  amount: string;
-  created_at: Date;
-  expires_at: Date;
 }
