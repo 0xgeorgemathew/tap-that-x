@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWalletClient, http, publicActions } from "viem";
+import { createPublicClient, createWalletClient, http, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import * as chains from "viem/chains";
 import deployedContracts from "~~/contracts/deployedContracts";
+import { isBridgeAction, parseBridgeCallData } from "~~/utils/actionTemplates";
+import { query } from "~~/utils/db";
+import { getChainName, sendBridgeNotification } from "~~/utils/pushNotifications";
 import { getAlchemyHttpUrl } from "~~/utils/scaffold-eth/networks";
 
 export const maxDuration = 30;
@@ -46,6 +49,79 @@ export async function POST(req: NextRequest) {
       transport: http(rpcUrl),
     }).extend(publicActions);
 
+    // Check configuration to see if this is a bridge action
+    const publicClient = createPublicClient({
+      chain: chainConfig,
+      transport: http(rpcUrl),
+    });
+
+    const configuration = (await publicClient.readContract({
+      address: contracts.TapThatXConfiguration.address,
+      abi: contracts.TapThatXConfiguration.abi,
+      functionName: "getConfiguration",
+      args: [owner as `0x${string}`, chip as `0x${string}`],
+    })) as any;
+
+    // Check if target is 0x0 (bridge action marker)
+    if (isBridgeAction(configuration.targetContract)) {
+      // Parse bridge parameters from callData
+      const bridgeParams = parseBridgeCallData(configuration.staticCallData as `0x${string}`);
+      if (!bridgeParams) {
+        return NextResponse.json({ error: "Invalid bridge callData" }, { status: 400 });
+      }
+
+      // Generate unique request ID using crypto random
+      const randomBytes = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      const requestId = `0x${randomBytes}`;
+
+      // Store bridge request in database
+      await query(
+        `
+        INSERT INTO bridge_requests (
+          request_id, user_address, chip_address, source_chain, dest_chain,
+          token_address, amount, description, chip_signature, timestamp, nonce
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
+        [
+          requestId,
+          owner.toLowerCase(),
+          chip.toLowerCase(),
+          bridgeParams.sourceChainId,
+          bridgeParams.destChainId,
+          "0x0000000000000000000000000000000000000000", // ETH
+          bridgeParams.amount.toString(),
+          configuration.description ||
+            `Bridge ETH from ${getChainName(bridgeParams.sourceChainId)} to ${getChainName(bridgeParams.destChainId)}`,
+          chipSignature,
+          timestamp,
+          nonce,
+        ],
+      );
+
+      // Send push notification to user's desktop
+      await sendBridgeNotification(owner, {
+        requestId,
+        amount: bridgeParams.amount.toString(),
+        token: "ETH",
+        sourceChainId: bridgeParams.sourceChainId,
+        destChainId: bridgeParams.destChainId,
+        sourceChainName: getChainName(bridgeParams.sourceChainId),
+        destChainName: getChainName(bridgeParams.destChainId),
+        url: `/bridge/execute/${requestId}`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requiresApproval: true,
+        requestId,
+        message: "Bridge request created. Check your desktop browser for approval notification.",
+      });
+    }
+
+    // Normal execution path (non-bridge actions)
     // Call executeTap on TapThatXExecutor
     const hash = await client.writeContract({
       address: contracts.TapThatXExecutor.address,
@@ -69,7 +145,6 @@ export async function POST(req: NextRequest) {
       blockNumber: receipt.blockNumber.toString(),
     });
   } catch (error) {
-    console.error("Execute tap relay error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Execution relay failed" },
       { status: 500 },
