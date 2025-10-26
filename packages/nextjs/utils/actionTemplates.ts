@@ -137,8 +137,8 @@ export const uniswapSwapTemplate: ActionTemplate = {
  */
 export const availBridgeTemplate: ActionTemplate = {
   id: "avail-bridge",
-  name: "Bridge ETH",
-  description: "Bridge ETH to another chain via Avail Nexus",
+  name: "Gas Refuel",
+  description: "Top up gas on X chain via Avail Nexus",
   category: "bridge",
   buildCallData: (params: { sourceChainId: number; destChainId: number; amount: bigint }) => {
     // Encode bridge parameters as callData
