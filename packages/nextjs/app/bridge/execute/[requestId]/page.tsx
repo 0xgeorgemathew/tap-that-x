@@ -2,9 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2, Repeat } from "lucide-react";
+import { getChainName } from "~~/utils/chainHelpers";
+import { type BridgeRequestData, verifyBridgeRequest } from "~~/utils/chipSignatureVerifier";
 
-type FlowState = "loading" | "ready" | "wallet_connecting" | "sdk_initializing" | "bridging" | "success" | "error";
+type FlowState =
+  | "loading"
+  | "verifying"
+  | "ready"
+  | "wallet_connecting"
+  | "sdk_initializing"
+  | "bridging"
+  | "success"
+  | "error";
 
 export default function BridgeExecutePage() {
   const params = useParams();
@@ -12,7 +22,7 @@ export default function BridgeExecutePage() {
 
   const [flowState, setFlowState] = useState<FlowState>("loading");
   const [statusMessage, setStatusMessage] = useState<string>("Loading bridge request...");
-  const [bridgeRequest, setBridgeRequest] = useState<any>(null);
+  const [bridgeRequest, setBridgeRequest] = useState<BridgeRequestData | null>(null);
 
   // Two-step initialization state
   const [walletConnected, setWalletConnected] = useState(false);
@@ -20,13 +30,19 @@ export default function BridgeExecutePage() {
   const [sdkInitialized, setSdkInitialized] = useState(false);
   const [sdk, setSdk] = useState<any>(null);
 
+  // Verification state
+  const [isVerified, setIsVerified] = useState(false);
+  const [recoveredChipAddress, setRecoveredChipAddress] = useState<string>("");
+
   // Load bridge request details
   useEffect(() => {
     if (!requestId) return;
 
-    fetch(`/api/bridge-requests/${requestId}`)
-      .then(res => res.json())
-      .then(data => {
+    const loadBridgeRequest = async () => {
+      try {
+        const res = await fetch(`/api/bridge-requests/${requestId}`);
+        const data = await res.json();
+
         if (data.error) {
           setFlowState("error");
           setStatusMessage(data.error);
@@ -34,32 +50,60 @@ export default function BridgeExecutePage() {
         }
 
         setBridgeRequest(data);
-        setFlowState("ready");
-        setStatusMessage("Bridge request loaded. Follow the steps below to execute.");
-      })
-      .catch(err => {
+        setFlowState("verifying");
+        setStatusMessage("Verifying chip signature and wallet ownership...");
+      } catch (err: any) {
         setFlowState("error");
-        setStatusMessage("Failed to load bridge request: " + err.message);
-      });
+        setStatusMessage(`Failed to load bridge request: ${err.message}`);
+      }
+    };
+
+    loadBridgeRequest();
   }, [requestId]);
 
   // Check if wallet is already connected on mount
   useEffect(() => {
     const checkConnection = async () => {
-      if (typeof window.ethereum !== "undefined") {
-        try {
-          const accounts = await window.ethereum.request({ method: "eth_accounts" });
-          if (accounts.length > 0) {
-            setWalletConnected(true);
-            setWalletAddress(accounts[0]);
-          }
-        } catch {
-          // Silent fail - user will connect manually
+      if (typeof window.ethereum === "undefined") return;
+
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        if (accounts.length > 0) {
+          setWalletConnected(true);
+          setWalletAddress(accounts[0]);
         }
+      } catch {
+        // Silent fail - user will connect manually
       }
     };
     checkConnection();
   }, []);
+
+  // Verify bridge request when both wallet and bridge request are loaded
+  useEffect(() => {
+    const performVerification = async () => {
+      if (!bridgeRequest || !walletAddress) return;
+
+      setFlowState("verifying");
+      setStatusMessage("Verifying chip signature and wallet ownership...");
+
+      const result = await verifyBridgeRequest(bridgeRequest, walletAddress);
+
+      if (!result.isValid) {
+        setIsVerified(false);
+        setFlowState("error");
+        setStatusMessage(`Security verification failed: ${result.error}`);
+        return;
+      }
+
+      setIsVerified(true);
+      setRecoveredChipAddress(result.recoveredChipAddress || "");
+      setFlowState("ready");
+      setStatusMessage("");
+    };
+
+    performVerification();
+  }, [bridgeRequest, walletAddress]);
 
   // STEP 1: Connect Wallet ONLY
   const handleConnectWallet = async () => {
@@ -81,7 +125,7 @@ export default function BridgeExecutePage() {
       setWalletConnected(true);
       setWalletAddress(addr);
       setFlowState("ready");
-      setStatusMessage("Wallet connected! Now initialize Nexus SDK (Step 2).");
+      setStatusMessage("");
     } catch (error: any) {
       setFlowState("error");
       setStatusMessage(error.message || "Failed to connect wallet");
@@ -96,21 +140,14 @@ export default function BridgeExecutePage() {
 
       const { sdk, initializeWithProvider, isInitialized } = await import("~~/utils/nexus");
 
-      // Check if already initialized globally
-      if (isInitialized()) {
-        setSdk(sdk);
-        setSdkInitialized(true);
-        setFlowState("ready");
-        setStatusMessage("SDK already initialized! Now you can execute the bridge (Step 3).");
-        return;
+      if (!isInitialized()) {
+        await initializeWithProvider(window.ethereum);
       }
-
-      await initializeWithProvider(window.ethereum);
 
       setSdk(sdk);
       setSdkInitialized(true);
       setFlowState("ready");
-      setStatusMessage("SDK initialized! Now you can execute the bridge (Step 3).");
+      setStatusMessage("");
     } catch (error: any) {
       setFlowState("error");
       setStatusMessage(`Failed to initialize Nexus SDK: ${error.message}`);
@@ -119,13 +156,19 @@ export default function BridgeExecutePage() {
 
   // STEP 3: Execute Bridge
   const handleExecuteBridge = async () => {
+    // Validation checks
     if (!bridgeRequest) {
       setStatusMessage("No bridge request loaded");
       setFlowState("error");
       return;
     }
 
-    // Verify user owns this request
+    if (!isVerified) {
+      setStatusMessage("Security verification failed. Cannot execute bridge.");
+      setFlowState("error");
+      return;
+    }
+
     if (walletAddress.toLowerCase() !== bridgeRequest.userAddress.toLowerCase()) {
       setStatusMessage("You are not the owner of this bridge request");
       setFlowState("error");
@@ -133,7 +176,7 @@ export default function BridgeExecutePage() {
     }
 
     if (!sdk || !sdkInitialized) {
-      setStatusMessage("SDK not initialized. Please complete steps 1 and 2 first.");
+      setStatusMessage("SDK not initialized. Please initialize Nexus first.");
       setFlowState("error");
       return;
     }
@@ -166,7 +209,9 @@ export default function BridgeExecutePage() {
       });
 
       setFlowState("success");
-      setStatusMessage(`Bridge successful! ${bridgeRequest.description}`);
+      setStatusMessage(
+        `Bridge successful! ${(parseFloat(bridgeRequest.amount) / 1e18).toFixed(4)} ETH to ${getChainName(bridgeRequest.destChain)}`,
+      );
     } catch (error: any) {
       setFlowState("error");
       setStatusMessage(error.message || "Bridge execution failed");
@@ -174,132 +219,270 @@ export default function BridgeExecutePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-indigo-50 to-white px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Bridge Execution</h1>
-          <p className="mt-2 text-sm text-gray-600">Execute your bridge request</p>
-        </div>
+    <div className="min-h-screen p-2 bg-gradient-to-br from-base-200/30 to-base-300/20">
+      <div className="w-full max-w-2xl mx-auto py-2">
+        {/* Main Glass Card */}
+        <div className="glass-card pt-5 px-5 pb-0.5 sm:pt-6 sm:px-6 sm:pb-0.5 flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="mb-3">
+            <div className="flex flex-col items-center text-center">
+              <div className="round-icon w-12 h-12 mb-2 shadow-lg">
+                <Repeat className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-lg font-bold text-base-content tracking-tight mb-1">
+                {flowState === "success"
+                  ? "Bridge Complete!"
+                  : flowState === "bridging"
+                    ? "Bridging in Progress..."
+                    : "Cross-Chain Bridge"}
+              </h1>
+              {bridgeRequest && (
+                <p className="text-xs text-base-content/70">
+                  {(parseFloat(bridgeRequest.amount) / 1e18).toFixed(4)} ETH: {getChainName(bridgeRequest.sourceChain)}{" "}
+                  → {getChainName(bridgeRequest.destChain)}
+                </p>
+              )}
+            </div>
+          </div>
 
-        {/* Status Indicators */}
-        {flowState !== "loading" && flowState !== "error" && (
-          <div className="mb-6 space-y-2 rounded-lg bg-gray-50 p-4">
-            <div className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${walletConnected ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-sm font-medium text-gray-700">
+          {/* Status Indicators - 5 Step Flow */}
+          {flowState !== "loading" && flowState !== "error" && bridgeRequest && (
+            <div className="mb-3 rounded-2xl bg-base-100/10 backdrop-blur-md p-4 border border-base-content/15 shadow-inner">
+              <div className="space-y-1.5">
+                {/* Step 1: Verify Authorized Wallet */}
+                <div className="flex items-center gap-5" role="status" aria-live="polite">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div
+                      className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold transition-all duration-300 ${
+                        walletConnected && isVerified
+                          ? "bg-success text-white shadow-lg shadow-success/30"
+                          : "bg-base-content/10 text-base-content/40"
+                      }`}
+                    >
+                      {walletConnected && isVerified ? "✓" : "1"}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base font-semibold text-base-content/90">Verify Authorized Wallet</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Line */}
+                <div className="flex items-center gap-5">
+                  <div className="w-10 flex justify-center">
+                    <div className={`w-0.5 h-3 ${recoveredChipAddress ? "bg-success" : "bg-base-content/10"}`}></div>
+                  </div>
+                </div>
+
+                {/* Step 2: Recover Chip Address */}
+                <div className="flex items-start gap-5" role="status" aria-live="polite">
+                  <div className="flex flex-col flex-1">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold transition-all duration-300 ${
+                          recoveredChipAddress
+                            ? "bg-success text-white shadow-lg shadow-success/30"
+                            : "bg-base-content/10 text-base-content/40"
+                        }`}
+                      >
+                        {recoveredChipAddress ? (
+                          "✓"
+                        ) : flowState === "verifying" ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          "2"
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-base font-semibold text-base-content/90">Detected Chip Address</p>
+                        {recoveredChipAddress && (
+                          <p className="text-xs text-base-content/60 mt-1.5 font-mono break-all">
+                            {recoveredChipAddress}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Line */}
+                <div className="flex items-center gap-5">
+                  <div className="w-10 flex justify-center">
+                    <div className={`w-0.5 h-3 ${isVerified ? "bg-success" : "bg-base-content/10"}`}></div>
+                  </div>
+                </div>
+
+                {/* Step 3: Verify Chip Signature */}
+                <div className="flex items-start gap-5" role="status" aria-live="polite">
+                  <div className="flex flex-col flex-1">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold transition-all duration-300 ${
+                          isVerified
+                            ? "bg-success text-white shadow-lg shadow-success/30"
+                            : "bg-base-content/10 text-base-content/40"
+                        }`}
+                      >
+                        {isVerified ? (
+                          "✓"
+                        ) : flowState === "verifying" ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          "3"
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-base font-semibold text-base-content/90">Verify Chip Signature</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Line */}
+                <div className="flex items-center gap-5">
+                  <div className="w-10 flex justify-center">
+                    <div className={`w-0.5 h-3 ${sdkInitialized ? "bg-success" : "bg-base-content/10"}`}></div>
+                  </div>
+                </div>
+
+                {/* Step 4: Initialize Nexus */}
+                <div className="flex items-center gap-5" role="status" aria-live="polite">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div
+                      className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold transition-all duration-300 ${
+                        sdkInitialized
+                          ? "bg-success text-white shadow-lg shadow-success/30"
+                          : "bg-base-content/10 text-base-content/40"
+                      }`}
+                    >
+                      {sdkInitialized ? (
+                        "✓"
+                      ) : flowState === "sdk_initializing" ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        "4"
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base font-semibold text-base-content/90">Initialize Nexus</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Line */}
+                <div className="flex items-center gap-5">
+                  <div className="w-10 flex justify-center">
+                    <div className={`w-0.5 h-3 ${flowState === "success" ? "bg-success" : "bg-base-content/10"}`}></div>
+                  </div>
+                </div>
+
+                {/* Step 5: Bridge Execution */}
+                <div className="flex items-center gap-5" role="status" aria-live="polite">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div
+                      className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold transition-all duration-300 ${
+                        flowState === "success"
+                          ? "bg-success text-white shadow-lg shadow-success/30"
+                          : "bg-base-content/10 text-base-content/40"
+                      }`}
+                    >
+                      {flowState === "success" ? (
+                        "✓"
+                      ) : flowState === "bridging" ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        "5"
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base font-semibold text-base-content/90">Bridge Execution</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Status Message - Compact */}
+          {flowState === "error" && (
+            <div className="mb-3">
+              <div className="glass-alert-error" role="alert">
+                <p className="text-sm break-words">{statusMessage}</p>
+                {bridgeRequest && !isVerified && (
+                  <p className="mt-2 text-xs opacity-80">
+                    Expected: {bridgeRequest.userAddress.slice(0, 8)}...{bridgeRequest.userAddress.slice(-6)}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {flowState === "success" && statusMessage && (
+            <div className="mb-3">
+              <div className="rounded-xl bg-success/10 border border-success/30 p-2.5 text-center">
+                <p className="text-sm text-success font-medium">{statusMessage}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons - Grid Layout */}
+          {flowState !== "loading" && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 my-4">
+              {/* STEP 1: Connect Wallet */}
+              <button
+                onClick={handleConnectWallet}
+                disabled={walletConnected || flowState === "wallet_connecting"}
+                className="glass-btn h-10 text-sm font-semibold transition-all hover:scale-105"
+                aria-label="Connect wallet"
+              >
                 {walletConnected
-                  ? `Wallet Connected (${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)})`
-                  : "Step 1: Connect Wallet"}
-              </span>
+                  ? "✓ Connected"
+                  : flowState === "wallet_connecting"
+                    ? "Connecting..."
+                    : "Connect Wallet"}
+              </button>
+
+              {/* STEP 2: Initialize Nexus */}
+              <button
+                onClick={handleInitializeSDK}
+                disabled={!walletConnected || !isVerified || sdkInitialized || flowState === "sdk_initializing"}
+                className="glass-btn h-10 text-sm font-semibold transition-all hover:scale-105"
+                aria-label="Initialize Nexus"
+              >
+                {sdkInitialized
+                  ? "✓ Initialize Nexus"
+                  : flowState === "sdk_initializing"
+                    ? "Initializing..."
+                    : "Initialize Nexus"}
+              </button>
+
+              {/* STEP 3: Execute Bridge */}
+              <button
+                onClick={handleExecuteBridge}
+                disabled={!isVerified || !sdkInitialized || flowState === "bridging" || flowState === "success"}
+                className="glass-btn h-10 text-sm font-semibold transition-all hover:scale-105 sm:col-span-1"
+                aria-label="Execute bridge"
+              >
+                {flowState === "success" ? "✓ Complete" : flowState === "bridging" ? "Executing..." : "Execute Bridge"}
+              </button>
             </div>
-            <div className="flex items-center gap-3">
-              <div
-                className={`h-3 w-3 rounded-full ${sdkInitialized ? "bg-green-500 animate-pulse" : "bg-gray-400"}`}
-              />
-              <span className="text-sm font-medium text-gray-700">
-                {sdkInitialized ? "SDK Initialized" : "Step 2: Initialize Nexus SDK"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${flowState === "success" ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-sm font-medium text-gray-700">
-                {flowState === "success" ? "Bridge Completed" : "Step 3: Execute Bridge"}
-              </span>
-            </div>
+          )}
+
+          {/* Powered by Avail Footer */}
+          <div className="mt-auto pt-1.5 pb-0 border-t border-base-content/5">
+            <p className="text-[10px] text-base-content/50 text-center">
+              Powered by{" "}
+              <a
+                href="https://availproject.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-base-content/70 hover:text-base-content/90 font-medium transition-colors"
+              >
+                Avail
+              </a>
+            </p>
           </div>
-        )}
-
-        {/* Status Icon */}
-        <div className="mb-6 flex justify-center">
-          {flowState === "loading" && <Loader2 className="h-16 w-16 animate-spin text-indigo-600" />}
-          {flowState === "ready" && <CheckCircle2 className="h-16 w-16 text-green-500" />}
-          {flowState === "wallet_connecting" && <Loader2 className="h-16 w-16 animate-spin text-blue-600" />}
-          {flowState === "sdk_initializing" && <Loader2 className="h-16 w-16 animate-spin text-indigo-600" />}
-          {flowState === "bridging" && <Loader2 className="h-16 w-16 animate-spin text-purple-600" />}
-          {flowState === "success" && <CheckCircle2 className="h-16 w-16 text-green-500" />}
-          {flowState === "error" && <AlertCircle className="h-16 w-16 text-red-500" />}
-        </div>
-
-        {/* Status Message */}
-        <div className="mb-6 text-center">
-          <p className="text-lg font-medium text-gray-900">{statusMessage}</p>
-        </div>
-
-        {/* Bridge Details */}
-        {bridgeRequest && flowState !== "loading" && (
-          <div className="mb-6 space-y-3 rounded-lg bg-gray-50 p-4">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Amount:</span>
-              <span className="text-sm font-medium text-gray-900">
-                {(parseFloat(bridgeRequest.amount) / 1e18).toFixed(4)} ETH
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">From Chain:</span>
-              <span className="text-sm font-medium text-gray-900">{bridgeRequest.sourceChain}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">To Chain:</span>
-              <span className="text-sm font-medium text-gray-900">{bridgeRequest.destChain}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Status:</span>
-              <span className="text-sm font-medium text-gray-900">{bridgeRequest.status}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons - Three Steps */}
-        {flowState !== "loading" && flowState !== "success" && (
-          <div className="space-y-3">
-            {/* STEP 1: Connect Wallet */}
-            <button
-              onClick={handleConnectWallet}
-              disabled={walletConnected || flowState === "wallet_connecting"}
-              className="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {walletConnected
-                ? "✅ Wallet Connected"
-                : flowState === "wallet_connecting"
-                  ? "Connecting..."
-                  : "1️⃣ Connect Wallet"}
-            </button>
-
-            {/* STEP 2: Initialize SDK */}
-            <button
-              onClick={handleInitializeSDK}
-              disabled={!walletConnected || sdkInitialized || flowState === "sdk_initializing"}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {sdkInitialized
-                ? "✅ SDK Initialized"
-                : flowState === "sdk_initializing"
-                  ? "Initializing..."
-                  : "2️⃣ Initialize Nexus"}
-            </button>
-
-            {/* STEP 3: Execute Bridge */}
-            <button
-              onClick={handleExecuteBridge}
-              disabled={!sdkInitialized || flowState === "bridging"}
-              className="w-full rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {flowState === "bridging" ? "Bridging..." : "3️⃣ Execute Bridge"}
-            </button>
-          </div>
-        )}
-
-        {/* Success State */}
-        {flowState === "success" && (
-          <div className="rounded-lg bg-green-50 p-4 text-center">
-            <p className="text-sm font-medium text-green-800">Bridge completed successfully!</p>
-          </div>
-        )}
-
-        {/* Request ID */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-gray-500">Request ID: {requestId?.slice(0, 10)}...</p>
         </div>
       </div>
     </div>
