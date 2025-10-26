@@ -17,11 +17,21 @@ export default function BalancesPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
-  // Auto-initialize SDK when wallet connects
+  // Auto-initialize SDK when page loads or wallet connects
   useEffect(() => {
     const initializeAndFetch = async () => {
-      if (!isConnected || isInitialized()) return;
+      // Skip if not connected
+      if (!isConnected) return;
 
+      // Check if already initialized
+      if (isInitialized()) {
+        // SDK already initialized, just fetch balances
+        setIsSdkInitialized(true);
+        handleFetchBalances();
+        return;
+      }
+
+      // Initialize SDK
       setIsInitializing(true);
       setError(null);
 
