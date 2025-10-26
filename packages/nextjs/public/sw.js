@@ -8,9 +8,13 @@ self.addEventListener("push", event => {
   try {
     const data = event.data.json();
 
+    // Convert amount from wei to readable format
+    const amountInWei = data.amount;
+    const amountInEth = (parseFloat(amountInWei) / 1e18).toFixed(4);
+
     const title = "TapThat X - Bridge Request";
     const options = {
-      body: `Bridge ${data.amount} ${data.token} from ${data.sourceChainName} to ${data.destChainName}`,
+      body: `Bridge ${amountInEth} ${data.token} from ${data.sourceChainName} to ${data.destChainName}`,
       icon: "/favicon.png",
       tag: `bridge-${data.requestId}`,
       requireInteraction: true,
