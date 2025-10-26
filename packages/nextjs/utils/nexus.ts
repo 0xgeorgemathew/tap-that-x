@@ -54,3 +54,14 @@ export async function executeBridge(params: {
 
   return await sdk.bridge(params as any);
 }
+
+/**
+ * Get unified balances across all supported chains
+ */
+export async function getUnifiedBalances() {
+  if (!sdk.isInitialized()) {
+    throw new Error("SDK not initialized. Please initialize first.");
+  }
+
+  return await sdk.getUnifiedBalances();
+}
