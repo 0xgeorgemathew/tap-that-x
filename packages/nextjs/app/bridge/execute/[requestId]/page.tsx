@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Loader2, Repeat } from "lucide-react";
+import { formatUnits } from "viem";
 import { getChainName } from "~~/utils/chainHelpers";
 import { type BridgeRequestData, verifyBridgeRequest } from "~~/utils/chipSignatureVerifier";
 
@@ -186,9 +187,12 @@ export default function BridgeExecutePage() {
       setStatusMessage("Preparing bridge transaction...");
 
       // Execute bridge - SDK will handle chain switching if needed
+      // Convert wei (string) to ETH (number) using formatUnits for precision
+      const amountInEth = Number(formatUnits(BigInt(bridgeRequest.amount), 18));
+
       const result = await sdk.bridge({
         token: "ETH",
-        amount: parseFloat(bridgeRequest.amount) / 1e18, // Convert wei to ETH
+        amount: amountInEth,
         chainId: bridgeRequest.destChain,
         sourceChains: [bridgeRequest.sourceChain],
       });
@@ -210,7 +214,7 @@ export default function BridgeExecutePage() {
 
       setFlowState("success");
       setStatusMessage(
-        `Bridge successful! ${(parseFloat(bridgeRequest.amount) / 1e18).toFixed(4)} ETH to ${getChainName(bridgeRequest.destChain)}`,
+        `Bridge successful! ${formatUnits(BigInt(bridgeRequest.amount), 18)} ETH to ${getChainName(bridgeRequest.destChain)}`,
       );
     } catch (error: any) {
       setFlowState("error");
@@ -238,8 +242,8 @@ export default function BridgeExecutePage() {
               </h1>
               {bridgeRequest && (
                 <p className="text-xs text-base-content/70">
-                  {(parseFloat(bridgeRequest.amount) / 1e18).toFixed(4)} ETH: {getChainName(bridgeRequest.sourceChain)}{" "}
-                  → {getChainName(bridgeRequest.destChain)}
+                  {formatUnits(BigInt(bridgeRequest.amount), 18)} ETH: {getChainName(bridgeRequest.sourceChain)} →{" "}
+                  {getChainName(bridgeRequest.destChain)}
                 </p>
               )}
             </div>
