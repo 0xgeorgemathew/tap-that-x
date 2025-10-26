@@ -81,9 +81,9 @@ export async function POST(req: NextRequest) {
         `
         INSERT INTO bridge_requests (
           request_id, user_address, chip_address, source_chain, dest_chain,
-          token_address, amount, description, chip_signature, timestamp, nonce
+          token_address, amount
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
         [
           requestId,
@@ -93,11 +93,6 @@ export async function POST(req: NextRequest) {
           bridgeParams.destChainId,
           "0x0000000000000000000000000000000000000000", // ETH
           bridgeParams.amount.toString(),
-          configuration.description ||
-            `Bridge ETH from ${getChainName(bridgeParams.sourceChainId)} to ${getChainName(bridgeParams.destChainId)}`,
-          chipSignature,
-          timestamp,
-          nonce,
         ],
       );
 

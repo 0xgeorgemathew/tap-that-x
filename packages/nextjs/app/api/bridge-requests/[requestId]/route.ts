@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ requ
       `
       SELECT
         request_id, user_address, chip_address, source_chain, dest_chain,
-        token_address, amount, description, status, created_at, expires_at
+        token_address, amount, created_at, expires_at
       FROM bridge_requests
       WHERE request_id = $1
     `,
@@ -40,8 +40,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ requ
       destChain: request.dest_chain,
       tokenAddress: request.token_address,
       amount: request.amount,
-      description: request.description,
-      status: request.status,
       createdAt: request.created_at.toISOString(),
       expiresAt: request.expires_at.toISOString(),
     });
