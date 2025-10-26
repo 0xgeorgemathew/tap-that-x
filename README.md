@@ -6,6 +6,11 @@
 
 **Built for ETHOnline 2025 Hackathon**
 
+## 🚀 Live Demo
+
+- **Main App**: [tapthatx.xyz](https://tapthatx.xyz)
+- **Avail Nexus Integration**: [tap-that-x-wipbridge.up.railway.app](https://tap-that-x-wipbridge.up.railway.app/) - Chip-authorized cross-chain bridging demo
+
 **🌐 Powered by Avail Nexus SDK** (`@avail-project/nexus-core`)
 - Cross-chain balance aggregation via `getUnifiedBalances()`
 - Secure cross-chain bridging via `bridge()`
