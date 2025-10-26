@@ -17,6 +17,26 @@ export default function BalancesPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
+  // Define fetch function first
+  const handleFetchBalances = async () => {
+    if (!isInitialized()) {
+      setError("SDK not initialized. Please connect your wallet.");
+      return;
+    }
+
+    setIsLoadingBalances(true);
+    setError(null);
+
+    try {
+      const result = await getUnifiedBalances();
+      setBalances(result as UnifiedBalances);
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch balances");
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
+
   // Auto-initialize SDK when page loads or wallet connects
   useEffect(() => {
     const initializeAndFetch = async () => {
@@ -27,7 +47,7 @@ export default function BalancesPage() {
       if (isInitialized()) {
         // SDK already initialized, just fetch balances
         setIsSdkInitialized(true);
-        handleFetchBalances();
+        await handleFetchBalances();
         return;
       }
 
@@ -55,25 +75,6 @@ export default function BalancesPage() {
 
     initializeAndFetch();
   }, [isConnected]);
-
-  const handleFetchBalances = async () => {
-    if (!isInitialized()) {
-      setError("SDK not initialized. Please connect your wallet.");
-      return;
-    }
-
-    setIsLoadingBalances(true);
-    setError(null);
-
-    try {
-      const result = await getUnifiedBalances();
-      setBalances(result as UnifiedBalances);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch balances");
-    } finally {
-      setIsLoadingBalances(false);
-    }
-  };
 
   const parsedBalances = useMemo(() => {
     if (!balances) return [];
