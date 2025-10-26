@@ -500,12 +500,6 @@ export function formatBalance(balance: string, decimals: number): string {
    // Base Sepolia balance increased by 0.01 ETH
    ```
 
-**Result:**
-- **Time**: ~30 seconds (vs. 5+ minutes manually)
-- **Steps**: 1 physical tap + push notification approval (vs. 7+ manual steps)
-- **Security**: Hardware-grade chip verification + multi-device 2FA
-- **UX**: No network switching, no bridge UI, no manual balance checking
-
 ---
 
 **Built with ❤️ using Avail Nexus SDK**
