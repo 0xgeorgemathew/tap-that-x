@@ -1,413 +1,162 @@
 # Tap That X
 
-> Tap your phone to authorize any blockchain transaction—no wallet popups
+> Hardware-grade 2FA security for blockchain transactions using NFC chips
 
-Tap That X eliminates wallet popup friction for blockchain transactions using NFC chips. Users register their chip once, pre-approve spending limits, then tap their phone to authorize any on-chain action—payments, DeFi interactions, contract calls—without MetaMask interruptions.
+**Tap That X** transforms NFC chips into physical two-factor authentication devices for blockchain transactions. The chip doesn't just initiate actions—it **approves them in real-time** through cryptographic signature verification. Combined with **Avail Nexus SDK**, this enables hardware-secured cross-chain operations with unified balance management across multiple networks.
 
 **Built for ETHOnline 2025 Hackathon**
 
+**🌐 Powered by Avail Nexus SDK** (`@avail-project/nexus-core`)
+- Cross-chain balance aggregation via `getUnifiedBalances()`
+- Secure cross-chain bridging via `bridge()`
+- Physical chip verification for high-value transfers
+
+## 🔑 Key Innovation
+
+**Physical 2FA Authentication**: Your NFC chip becomes a hardware security key that must physically approve every transaction through cryptographic signature verification.
+
+**Cross-Chain Security**: Chip-authorized transactions combined with Avail Nexus SDK enable secure bridging, unified balance queries, and multi-chain operations—all protected by physical device verification.
+
+**Demo Use Case**: Configure your chip to top up gas on Base Sepolia. Tap to initiate → chip signature verifies authorization → Nexus SDK executes cross-chain bridge from Sepolia → unified balances confirm successful top-up. High-value transactions now require physical presence.
+
+---
+
 ## 🎯 The Problem
 
-Current blockchain UX requires users to:
+**Security Vulnerabilities:**
+- Software wallets vulnerable to phishing and malware
+- No physical verification for high-value transactions
+- Unauthorized access if private keys are compromised
 
-- Approve every transaction in MetaMask/wallet
-- Switch networks manually
-- Sign multiple times for a single action
-- Wait through multiple confirmation screens
-
-This creates friction that prevents mainstream adoption.
+**Cross-Chain Complexity:**
+- Manual network switching and bridge interfaces
+- Fragmented balance views across multiple chains
+- Complex multi-step processes for cross-chain transfers
 
 ## 💡 The Solution
 
-**Physical tap authorization** replaces wallet popups:
+**Hardware-Grade 2FA with Cross-Chain Capabilities:**
 
-1. **One-time setup:** Register NFC chip + approve spending limits
-2. **Every payment:** Tap phone → chip signs authorization → transaction executes
-3. **Result:** Sub-3-second payments with zero wallet popups
+1. **Configure**: Set chip action (e.g., bridge ETH from Sepolia → Base)
+2. **Tap to Initiate**: Physical chip tap creates authorization request
+3. **Verify & Approve**: System validates chip signature (EIP-712)—transaction won't execute without verified chip approval
+4. **Execute**: Avail Nexus SDK handles cross-chain bridging automatically
+5. **Confirm**: Unified Balances API shows updated balances across all chains
+
+**Result**: Hardware-secured, cross-chain operations with physical approval requirement
 
 ## 🏗 Architecture
 
+### Chip-Authorized Cross-Chain Flow with Push Notifications
+
 ```
-┌─────────────┐
-│  NFC Chip   │ ──── Signs EIP-712 messages with private key
-└──────┬──────┘
-       │ tap
-┌──────▼──────────┐
-│  Mobile Device  │ ──── Reads chip via @arx-research/libhalo
-└──────┬──────────┘
-       │ HTTP
-┌──────▼──────────┐
-│  Relay Server   │ ──── Sponsors gas, submits transaction
-└──────┬──────────┘
-       │ on-chain
-┌──────▼────────────────┐
-│  TapThatXProtocol     │ ──── Verifies chip signature, executes call
-│  TapThatXRegistry     │ ──── Validates chip ownership
-└───────────────────────┘
+┌─────────────────┐
+│  Mobile Device  │ ──── 1. User taps NFC chip
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   NFC Chip      │ ──── 2. Signs EIP-712 authorization
+└────────┬────────┘       (bridge request with parameters)
+         │
+         │ HTTP POST
+         ▼
+┌─────────────────────────┐
+│  Backend Relay Server   │ ──── 3. Verifies chip signature
+└────────┬────────────────┘       Validates chip ownership
+         │
+         │ Push Notification (VAPID)
+         ▼
+┌─────────────────────────┐
+│  Desktop Interface      │ ──── 4. User receives notification
+└────────┬────────────────┘       "Approve bridge request?"
+         │
+         │ User clicks notification
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│  /bridge/execute/[requestId] page                       │
+│  • Verifies authorized wallet                           │
+│  • Reads chip address from signature                    │
+│  • Confirms chip ownership                              │
+└────────┬────────────────────────────────────────────────┘
+         │
+         │ User connects wallet
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│  Avail Nexus SDK Initialization                         │
+│  • sdk.initialize(window.ethereum)                      │
+│  • Validates wallet owns chip                           │
+└────────┬────────────────────────────────────────────────┘
+         │
+         │ Execute bridge
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│  sdk.bridge({ token, amount, chainId, sourceChains })   │
+│  • Routes ETH from Sepolia → Base Sepolia               │
+│  • Handles chain switching automatically                │
+└────────┬────────────────────────────────────────────────┘
+         │
+         │ Confirm success
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│  sdk.getUnifiedBalances()                               │
+│  • Shows updated balances across all chains             │
+│  • Confirms Base Sepolia received ETH                   │
+└─────────────────────────────────────────────────────────┘
 ```
+
+## 🔐 Security Model
+
+### Physical 2FA Verification
+
+The NFC chip functions as a hardware authentication device—transactions cannot execute without physical chip presence and signature verification.
+
+**Authorization Flow:**
+
+1. **Chip Registration**: NFC chip registers to wallet address via EIP-712 signature proving chip ownership
+2. **Action Configuration**: User pre-configures permitted actions (transfers, bridges, swaps)
+3. **Tap Initiation**: User taps chip to create authorization request
+4. **Signature Verification**: System validates chip's cryptographic signature
+5. **Ownership Check**: Smart contract confirms chip is registered to wallet address
+6. **Execution**: Only after verification does transaction execute
+
+**Security Features:**
+
+- **EIP-712 Typed Signatures**: Structured data signing prevents blind signature attacks
+- **Nonce-Based Replay Protection**: Each signature uses unique nonce, preventing reuse
+- **Timestamp Expiration**: 5-minute authorization window limits stolen signature lifespan
+- **Chip Ownership Registry**: On-chain verification that chip belongs to authorized wallet
+- **Physical Presence Requirement**: Transaction fails without physical chip tap and valid signature
+
+### Cross-Chain Security with Avail Nexus
+
+Combining chip-based 2FA with Avail Nexus SDK creates hardware-secured cross-chain operations:
+
+- **Unified Balance Queries**: View assets across all chains via `sdk.getUnifiedBalances()` before executing transfers
+- **Chip-Authorized Bridging**: Cross-chain transfers require physical chip approval via `sdk.bridge()`
+- **Push Notification Layer**: Desktop receives real-time notification when chip tap initiates action
+- **Multi-Device Verification**: Mobile tap + Desktop approval creates two-factor security
+- **Real-Time Verification**: Chip signature validated before Nexus executes bridge transaction
+- **Post-Transaction Confirmation**: Unified balances confirm successful cross-chain transfer
+
+---
 
 ## 📜 Smart Contracts
 
 Deployed on **Base Sepolia** (Chain ID: 84532)
 
-### Core Contracts
+- **TapThatXRegistry** (`0x91D05d5B8913BCdA59f1923dC6831B108154Df22`) - Manages chip-to-owner registration
+- **TapThatXProtocol** (`0x0F917750db157D65c6c14e5Ce5828a250569afE1`) - Executes chip-authorized contract calls
 
-#### [TapThatXRegistry](packages/foundry/contracts/core/TapThatXRegistry.sol)
 
-**Address:** `0x91D05d5B8913BCdA59f1923dC6831B108154Df22`
-
-Manages chip registration and ownership via EIP-712 signatures.
-
-**Key Functions:**
-
-- `registerChip(address chipAddress, bytes chipSignature)` - Register chip with ownership proof
-- `getOwner(address chip)` - Get chip owner
-- `isChipRegistered(address chip)` - Check registration status
-
-**EIP-712 Domain:**
-
-```solidity
-name: "TapThatXRegistry"
-version: "1"
-```
-
-#### [TapThatXProtocol](packages/foundry/contracts/core/TapThatXProtocol.sol)
-
-**Address:** `0x0F917750db157D65c6c14e5Ce5828a250569afE1`
-
-Executes arbitrary contract calls authorized by registered chips.
-
-**Key Functions:**
-
-- `executeAuthorizedCall(address owner, address target, bytes callData, uint256 value, bytes chipSignature, uint256 timestamp, bytes32 nonce)` - Execute chip-authorized transaction
-- `verifyChipAuth(...)` - Verify chip authorization signature
-
-**Security Features:**
-
-- ✅ Nonce-based replay protection
-- ✅ 5-minute timestamp window
-- ✅ Chip ownership validation via Registry
-- ✅ ReentrancyGuard protection
-
-**EIP-712 CallAuthorization:**
-
-```solidity
-struct CallAuthorization {
-    address owner;      // Chip owner
-    address target;     // Contract to call
-    bytes callData;     // Function call data
-    uint256 value;      // ETH value
-    uint256 timestamp;  // Authorization time
-    bytes32 nonce;      // Unique nonce
-}
-```
-
-#### [TapThatXAuth](packages/foundry/contracts/core/TapThatXAuth.sol)
-
-Authentication library providing signature verification utilities.
-
-**Functions:**
-
-- `validateTimestamp(uint256 timestamp, uint256 maxWindow)` - Validate timestamp freshness
-- `recoverChipFromCallAuth(bytes32 domainSeparator, CallAuthorization auth, bytes signature)` - Recover chip address from signature
-
-#### [USDCTapPayment](packages/foundry/contracts/examples/USDCTapPayment.sol)
-
-**Address:** `0x4C39e327108808f0121c37110B8970752E2fC5de`
-
-Example implementation showing tap-to-pay for USDC tokens.
-
-**Key Functions:**
-
-- `tapToPay(address owner, bytes transferCallData, bytes chipSignature, uint256 timestamp, bytes32 nonce)` - Execute USDC payment via chip authorization
-- `checkAllowance(address owner, uint256 amount)` - Check if user has approved sufficient USDC
-- `getApprovalTarget()` - Returns TapThatXProtocol address for approval
-
-#### [MockUSDC](packages/foundry/contracts/MockUSDC.sol)
-
-**Address:** `0x419184067e0C40D3622717be5dF4758DFd3d7242`
-
-Test USDC token with 6 decimals (ERC20).
-
-## 🎨 Frontend Implementation
-
-Built with Next.js 15 and React 19.
-
-### Pages
-
-#### [Landing Page](packages/nextjs/app/page.tsx) - `/`
-
-- Project introduction
-- "Register Your Chip" CTA
-- Glassmorphism design with mobile-first UX
-
-#### [Chip Registration](packages/nextjs/app/register/page.tsx) - `/register`
-
-**3-Step Flow:**
-
-1. **Detect Chip** - Hold device near NFC chip (2-3 sec)
-2. **Sign Authorization** - Tap chip to authorize registration (2-3 sec)
-3. **Confirm Transaction** - Confirm in wallet (5-10 sec)
-
-**Features:**
-
-- Real-time step indicators
-- ChipAddressDisplay component showing registered address
-- Success state with "Register Another Chip" option
-
-**Implementation:**
-
-```typescript
-// Step 1: Read chip address
-const chipData = await signMessage({ message: "init", format: "text" });
-const chipAddress = chipData.address;
-
-// Step 2: Sign EIP-712 registration
-const registrationSig = await signTypedData({
-  domain: { name: "TapThatXRegistry", version: "1", chainId, verifyingContract },
-  types: { ChipRegistration: [...] },
-  message: { owner: userAddress, chipAddress }
-});
-
-// Step 3: Submit transaction
-writeContract({
-  address: registryAddress,
-  abi: registryAbi,
-  functionName: "registerChip",
-  args: [chipAddress, registrationSig.signature]
-});
-```
-
-#### [USDC Approval](packages/nextjs/app/approve/page.tsx) - `/approve`
-
-One-time USDC approval setup for seamless payments.
-
-**Features:**
-
-- Current allowance checker
-- Approve unlimited spending (maxUint256)
-- Revoke approval option
-- Real-time approval status with success indicators
-
-**Implementation:**
-
-```typescript
-// Approve USDC spending to TapThatXProtocol
-writeContract({
-  address: USDC_ADDRESS,
-  abi: usdcAbi,
-  functionName: "approve",
-  args: [PROTOCOL_ADDRESS, maxUint256],
-});
-```
-
-#### [Tap to Pay](packages/nextjs/app/payment/page.tsx) - `/payment`
-
-**3-Step Payment Flow:**
-
-1. **Detect & Verify** - Verify chip ownership (2-3 sec)
-2. **Authorize Payment** - Tap chip to authorize (2-3 sec)
-3. **Process Transaction** - Relay to blockchain (10-15 sec)
-
-**Features:**
-
-- Automatic chip ownership verification via Registry
-- Balance preview showing pre/post-transaction state
-- Gasless execution (relayer pays gas)
-- "No wallet popup needed" badge
-
-**Implementation:**
-
-```typescript
-// Step 1: Detect chip and verify registration
-const chipData = await signMessage({ message: "init", format: "text" });
-const chipAddress = chipData.address;
-const chipOwner = await registry.getOwner(chipAddress);
-
-// Step 2: Build USDC transfer calldata
-const transferCallData = encodeTransferFrom(userAddress, merchant, amount);
-
-// Step 3: Chip signs EIP-712 authorization
-const chipSig = await signTypedData({
-  domain: { name: "TapThatXProtocol", version: "1", chainId, verifyingContract },
-  types: { CallAuthorization: [...] },
-  message: { owner, target: USDC, callData: transferCallData, value: 0, timestamp, nonce }
-});
-
-// Step 4: Relay payment (gasless)
-await relayPayment({ owner, transferCallData, chipSignature, timestamp, nonce });
-```
-
-### Custom Hooks
-
-#### [useHaloChip](packages/nextjs/hooks/useHaloChip.ts)
-
-NFC chip communication via @arx-research/libhalo.
-
-**Functions:**
-
-- `signMessage({ message, digest, format })` - Sign arbitrary message
-- `signTypedData({ domain, types, primaryType, message })` - Sign EIP-712 structured data
-
-**Features:**
-
-- BigInt serialization for JSON compatibility
-- Error handling with user-friendly messages
-- Loading state management
-
-#### [useGaslessRelay](packages/nextjs/hooks/useGaslessRelay.ts)
-
-Backend relayer for gasless transactions.
-
-**Function:**
-
-- `relayPayment(paymentData)` - Submit payment to relay API
-
-**Implementation:**
-
-```typescript
-const relayPayment = async (paymentData) => {
-  const response = await fetch("/api/relay-payment", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...paymentData, chainId }),
-  });
-  return await response.json();
-};
-```
-
-### Backend API
-
-#### [Relay Payment API](packages/nextjs/app/api/relay-payment/route.ts)
-
-Next.js API route that sponsors gas for user transactions.
-
-**Endpoint:** `POST /api/relay-payment`
-
-**Request Body:**
-
-```typescript
-{
-  owner: address,           // User address
-  transferCallData: bytes,  // Encoded USDC transfer
-  chipSignature: bytes,     // Chip's EIP-712 signature
-  timestamp: uint256,       // Authorization timestamp
-  nonce: bytes32,          // Unique nonce
-  chainId: number          // Chain ID
-}
-```
-
-**Response:**
-
-```typescript
-{
-  success: true,
-  transactionHash: string,
-  blockNumber: string
-}
-```
-
-**Implementation:**
-
-```typescript
-// Relayer signs transaction with private key
-const account = privateKeyToAccount(RELAYER_PRIVATE_KEY);
-const client = createWalletClient({ account, chain, transport: http(rpcUrl) });
-
-// Call USDCTapPayment.tapToPay
-const hash = await client.writeContract({
-  address: usdcPaymentAddress,
-  abi: usdcPaymentAbi,
-  functionName: "tapToPay",
-  args: [owner, transferCallData, chipSignature, timestamp, nonce],
-});
-
-const receipt = await client.waitForTransactionReceipt({ hash });
-```
-
-**Environment Variables:**
-
-- `RELAYER_PRIVATE_KEY` - Private key of relayer account (must be funded)
-- `ALCHEMY_API_KEY` - Alchemy RPC endpoint (optional, falls back to public RPC)
-
-### UI Components
-
-**Design System:**
-
-- Glassmorphism cards with blur effects
-- Mobile-first responsive design (thumb zone optimization)
-- Lucide React icons
-- Step indicators for multi-step flows
-- Real-time status messages with animations
-
-**Key Components:**
-
-- `StepIndicator` - Progress visualization for flows
-- `ChipAddressDisplay` - Show registered chip address
-- `BalancePreview` - Pre/post transaction balance preview
-- `UnifiedNavigation` - Bottom navigation bar
-
-## 🧪 Testing
-
-Comprehensive test suite in [TapThatX.t.sol](packages/foundry/test/TapThatX.t.sol)
-
-**Test Coverage:**
-
-✅ **Chip Registration**
-
-- `testRegisterChip()` - Successfully register chip with valid signature
-- `testCanReregisterChip()` - Allow chip re-registration (hackathon flexibility)
-
-✅ **Authorized Calls**
-
-- `testExecuteAuthorizedCall()` - Execute USDC transfer via chip authorization
-- `testUnregisteredChipRejected()` - Reject calls from unregistered chips
-
-✅ **Security**
-
-- `testCannotReplayNonce()` - Nonce replay protection
-- `testExpiredTimestamp()` - Reject expired authorizations (>5 min old)
-
-✅ **Example Implementation**
-
-- `testUSDCTapPayment()` - End-to-end USDC payment flow
-
-**Run Tests:**
-
-```bash
-yarn foundry:test
-```
 
 ## 🛠 Technology Stack
 
-### Smart Contracts
-
-- **Foundry** - Solidity development framework
-- **OpenZeppelin** - EIP712, ECDSA, ReentrancyGuard, Ownable
-- **Solidity ^0.8.19**
-
-### Frontend
-
-- **Next.js 15** - React framework with App Router
-- **React 19** - UI library
-- **Wagmi 2.16** - React hooks for Ethereum
-- **Viem 2.34** - TypeScript Ethereum library
-- **RainbowKit 2.2** - Wallet connection UI
-- **@arx-research/libhalo 1.15** - NFC chip communication
-
-### UI/UX
-
-- **TailwindCSS 4** - Utility-first CSS
-- **DaisyUI 5** - Component library
-- **Lucide React** - Icon library
-- **GSAP 3.13** - Animation library (optional)
-- **Glassmorphism design** - Modern UI aesthetic
-
-### Infrastructure
-
-- **Railway** - Deployment platform
-- **Alchemy** - RPC provider (optional)
-- **Base Sepolia** - Testnet deployment
+- **Smart Contracts:** Foundry, Solidity, OpenZeppelin
+- **Frontend:** Next.js 15, React 19, TailwindCSS, Wagmi, Viem
+- **NFC Integration:** @arx-research/libhalo
+- **Cross-Chain:** @avail-project/nexus-core
+- **Deployment:** Railway, Base Sepolia testnet
 
 ## 🚀 Getting Started
 
@@ -426,35 +175,38 @@ git clone https://github.com/yourusername/tap-that-x.git
 cd tap-that-x
 
 # Install dependencies
-npm install
+yarn install
 ```
 
 ### Environment Setup
 
-Create `.env` file in `packages/nextjs/`:
+Create `.env.local` file in `packages/nextjs/`:
 
 ```env
+# Enable experimental Corepack (for Yarn)
 # Relayer account (must be funded with testnet ETH)
-RELAYER_PRIVATE_KEY=0x...
+RELAYER_PRIVATE_KEY="0x..."
+
+# WalletConnect Project ID (required for RainbowKit)
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="your_project_id"
 
 # Alchemy API key (optional, improves RPC reliability)
-ALCHEMY_API_KEY=...
+NEXT_PUBLIC_ALCHEMY_API_KEY="your_alchemy_api_key"
 
-# Or use public name
-NEXT_PUBLIC_ALCHEMY_API_KEY=...
+# VAPID keys for web push notifications 
+VAPID_PUBLIC_KEY="your_vapid_public_key"
+VAPID_PRIVATE_KEY="your_vapid_private_key"
+VAPID_SUBJECT="mailto:your_email@example.com"
+
+# Database (PostgreSQL) -  for bridge request storage
+DATABASE_URL="postgresql://localhost:5432/tapthatx_dev"
 ```
-
-**Fund Relayer Account:**
-
-1. Generate new wallet or use existing private key
-2. Get testnet ETH from [Base Sepolia Faucet](https://www.alchemy.com/faucets/base-sepolia)
-3. Add private key to `.env`
 
 ### Run Locally
 
 ```bash
 # Start Next.js development server
-npm run start
+yarn start
 
 # Visit http://localhost:3000
 ```
@@ -463,96 +215,298 @@ npm run start
 
 ```bash
 # Start local Foundry chain (optional for local testing)
-npm run chain
+yarn chain
 
 # Deploy contracts to Base Sepolia
-npm run deploy
+yarn deploy
 
 # Deploy to other networks (update foundry.toml)
-npm run deploy -- --network <network-name>
+yarn deploy -- --network <network-name>
 ```
 
 ## 📊 Current Status
 
 ### ✅ What Works
 
-**End-to-End Tap-to-Pay on Base Sepolia:**
+**Physical 2FA Security:**
 
-1. ✅ Register NFC chip on-chain
-2. ✅ Approve USDC spending to protocol
-3. ✅ Tap phone to authorize payment
-4. ✅ Gasless execution via backend relayer
-5. ✅ Transaction completes in 10-15 seconds
-6. ✅ Zero wallet popups during payment
+1. ✅ NFC chip registration with EIP-712 signature verification
+2. ✅ Hardware-grade transaction approval via physical chip tap
+3. ✅ Push notification layer for desktop approval (VAPID)
+4. ✅ Multi-device verification (mobile tap + desktop approval)
+5. ✅ Chip ownership validation on-chain (TapThatXRegistry)
+6. ✅ Nonce-based replay protection prevents signature reuse
+7. ✅ Timestamp expiration (5-minute window) for authorization freshness
+8. ✅ Physical presence requirement—no execution without verified chip
 
-**Smart Contract Features:**
+**Avail Nexus SDK Integration:**
 
-- ✅ EIP-712 signature verification
-- ✅ Replay attack protection (nonce system)
-- ✅ Timestamp expiration (5-minute window)
-- ✅ Generic `executeAuthorizedCall` for any contract
-- ✅ Chip ownership registry
-- ✅ ReentrancyGuard protection
+- ✅ **Unified Balances**: `sdk.getUnifiedBalances()` aggregates ETH/tokens across Sepolia & Base Sepolia
+- ✅ **Cross-Chain Bridging**: `sdk.bridge()` executes chip-authorized cross-chain ETH transfers
+- ✅ **SDK Initialization**: Global SDK instance with MetaMask provider integration
+- ✅ **Balance Utilities**: Parse and format Nexus responses for UI display
+- ✅ **Security Integration**: Chip signature verification before Nexus bridge execution
 
-**Frontend Features:**
+**End-to-End Workflows:**
 
-- ✅ Mobile-first responsive design
-- ✅ NFC chip communication via @arx-research/libhalo
-- ✅ 3-step registration flow with visual feedback
-- ✅ 3-step payment flow with status indicators
-- ✅ Real-time balance preview
-- ✅ Glassmorphism UI with accessibility (WCAG AA compliant)
-- ✅ Bottom navigation for thumb-zone optimization
+1. ✅ Register NFC chip to wallet address
+2. ✅ Configure chip action (token transfer, cross-chain bridge, etc.)
+3. ✅ Tap phone to authorize execution (generates EIP-712 signature)
+4. ✅ System verifies chip signature and ownership
+5. ✅ Gasless execution via backend relayer or Nexus SDK
+6. ✅ Unified balances confirm transaction success across chains
 
-**Testing:**
+**Smart Contract Security:**
 
-- ✅ 6 comprehensive Foundry tests
-- ✅ Coverage for registration, payments, security
+- ✅ EIP-712 typed signature verification (TapThatXAuth)
+- ✅ Replay attack protection (nonce tracking)
+- ✅ Chip ownership registry (TapThatXRegistry)
+- ✅ Generic `executeAuthorizedCall` for arbitrary contract interactions
+- ✅ ReentrancyGuard protection on critical functions
 
-### 🔮 What's Next
 
-**Avail Nexus Integration:**
 
-Transform Tap That X into a truly **cross-chain** payment protocol using Avail Nexus.
+## 🌐 Avail Nexus SDK Integration
 
-#### Vision
+Tap That X integrates **Avail Nexus SDK** (`@avail-project/nexus-core`) to enable hardware-secured cross-chain operations. The integration combines physical chip verification with Nexus's unified balance queries and cross-chain bridging capabilities.
 
-User holds USDC on Arbitrum, merchant accepts on Base. User taps once → Nexus routes payment across chains → settlement in seconds. Zero bridging UX.
+### SDK Implementation Overview
 
-#### Technical Implementation
+**Key Files:**
+- [`packages/nextjs/utils/nexus.ts`](packages/nextjs/utils/nexus.ts) - SDK initialization and wrapper functions
+- [`packages/nextjs/app/balances/page.tsx`](packages/nextjs/app/balances/page.tsx) - Unified balance UI implementation
+- [`packages/nextjs/app/bridge/execute/[requestId]/page.tsx`](packages/nextjs/app/bridge/execute/[requestId]/page.tsx) - Chip-authorized bridge execution
+- [`packages/nextjs/utils/balance-utils.ts`](packages/nextjs/utils/balance-utils.ts) - Balance parsing and formatting utilities
+- [`packages/nextjs/types/nexus.ts`](packages/nextjs/types/nexus.ts) - TypeScript type definitions
 
-**Phase 1: Multi-Chain Balance Aggregation**
 
-- Integrate Nexus SDK for cross-chain balance queries
-- Update UI to show aggregated USDC across all Nexus-connected chains
-- Display available liquidity per chain
+### Core SDK Usage
 
-**Phase 2: Cross-Chain Authorization Schema**
+#### 1. SDK Initialization (`utils/nexus.ts`)
 
-- Extend EIP-712 `CallAuthorization` to include source/destination chain IDs
-- Update chip signing flow to specify cross-chain routing
-- Implement Nexus message passing in `TapThatXProtocol`
+**Global SDK Instance:**
+```typescript
+import { NexusSDK } from "@avail-project/nexus-core";
+import { Buffer } from "buffer";
+import process from "process";
 
-**Phase 3: "Deploy Once, Scale Everywhere"**
+// Browser polyfills required for Nexus SDK
+if (typeof window !== "undefined") {
+  window.Buffer = Buffer;
+  window.process = process;
+}
 
-- Deploy `TapThatXProtocol` on Avail/Nexus base layer
-- Enable merchants on ANY Nexus-connected chain to accept payments
-- Eliminate per-chain deployment overhead
+// Initialize SDK in testnet mode
+export const sdk = new NexusSDK({ network: "testnet" });
 
-**Phase 4: UX Enhancements**
+// Initialize with MetaMask provider
+export async function initializeWithProvider(provider: any) {
+  if (!sdk.isInitialized()) {
+    await sdk.initialize(provider);
+  }
+}
+```
 
-- Automatic best-route selection (lowest fees, fastest settlement)
-- Unified transaction status across chains
-- Sub-2-second cross-chain settlements
+---
 
-#### Developer Benefits
+#### 2. Unified Balance Aggregation (`app/balances/page.tsx`)
 
-- **Before Nexus:** Deploy contracts on 10 chains = 10 deployments, fragmented liquidity
-- **With Nexus:** Deploy once, access liquidity from all chains, seamless UX
+**Purpose:** Query and display token balances across multiple chains in a single view.
 
-#### User Benefits
+**SDK Method:** `sdk.getUnifiedBalances()`
 
-- **Before Nexus:** Bridge USDC manually, switch networks, wait 10+ minutes
-- **With Nexus:** Tap once, pay from any chain, settle in seconds
+**Implementation:**
+```typescript
+// Fetch cross-chain balances
+const unifiedBalances = await sdk.getUnifiedBalances();
 
-**Tap once. Pay anywhere. Zero friction.**
+// Example response structure:
+[
+  {
+    symbol: "ETH",
+    balance: "0.5",
+    balanceInFiat: 1250.00,
+    decimals: 18,
+    breakdown: [
+      {
+        balance: "0.3",
+        balanceInFiat: 750.00,
+        chain: { id: 11155111, name: "Sepolia", logo: "..." },
+        contractAddress: "0x...",
+        decimals: 18
+      },
+      {
+        balance: "0.2",
+        balanceInFiat: 500.00,
+        chain: { id: 84532, name: "Base Sepolia", logo: "..." },
+        contractAddress: "0x...",
+        decimals: 18
+      }
+    ]
+  }
+]
+```
+
+**UI Features:**
+- Displays total USD value across all chains
+- Token-grouped accordion view with per-chain breakdowns
+- Real-time refresh capability
+- Auto-initialization on wallet connection
+
+**Code Reference:** [`packages/nextjs/app/balances/page.tsx:72-79`](packages/nextjs/app/balances/page.tsx#L72-L79)
+
+
+---
+
+#### 3. Chip-Authorized Cross-Chain Bridging (`app/bridge/execute/[requestId]/page.tsx`)
+
+**Purpose:** Execute hardware-secured cross-chain ETH transfers using NFC chip verification + Avail Nexus SDK.
+
+**SDK Method:** `sdk.bridge(params)`
+
+**Implementation:**
+```typescript
+// Execute cross-chain bridge with chip authorization
+const result = await sdk.bridge({
+  token: "ETH",              // Token to bridge
+  amount: 0.01,              // Amount in ETH (not wei)
+  chainId: 84532,            // Destination chain (Base Sepolia)
+  sourceChains: [11155111]   // Source chain (Sepolia)
+});
+
+// Returns transaction hash and status
+{
+  success: true,
+  transactionHash: "0x...",
+  sourceChain: 11155111,
+  destinationChain: 84532
+}
+```
+
+**Security Flow:**
+
+1. **Chip Authorization**: User taps NFC chip → generates EIP-712 signature with bridge parameters
+2. **Backend Verification**: Server recovers chip address from signature, validates ownership
+3. **Push Notification**: Desktop receives real-time notification with bridge request details
+4. **Desktop Approval**: User clicks notification → opens bridge execution page
+5. **Wallet Connection**: User connects MetaMask → Nexus SDK initializes
+6. **Ownership Check**: System confirms connected wallet owns the chip
+7. **Bridge Execution**: `sdk.bridge()` executes cross-chain transfer
+8. **Confirmation**: Unified balances refresh to show updated balances on destination chain
+
+**Security Features:**
+- **EIP-712 Chip Signature**: Bridge request signed by physical chip, verified on backend
+- **Push Notification 2FA**: Desktop receives notification requiring explicit approval
+- **Multi-Device Verification**: Mobile chip tap + desktop approval creates two-factor security
+- **Wallet Ownership Validation**: Connected wallet must be registered chip owner
+- **Physical Presence Requirement**: Transaction fails without valid chip tap
+- **Post-Execution Verification**: Unified balances confirm successful cross-chain transfer
+
+**Code References:**
+- Bridge execution: [`packages/nextjs/app/bridge/execute/[requestId]/page.tsx:205-213`](packages/nextjs/app/bridge/execute/[requestId]/page.tsx#L205-L213)
+- Signature verification: [`packages/nextjs/app/bridge/execute/[requestId]/page.tsx:105-154`](packages/nextjs/app/bridge/execute/[requestId]/page.tsx#L105-L154)
+
+---
+
+#### 4. Balance Processing Utilities (`utils/balance-utils.ts`)
+
+**Purpose:** Transform Nexus SDK responses into UI-friendly data structures.
+
+**Implementation:**
+
+```typescript
+// Key utility functions
+export function parseUnifiedBalances(unifiedBalances: UnifiedBalance[]): ParsedBalance[] {
+  // Flattens nested SDK response into per-chain token entries
+}
+
+export function groupByToken(balances: ParsedBalance[]): Map<string, ParsedBalance[]> {
+  // Groups balances by token symbol for accordion UI
+}
+
+export function getTotalValueUSD(balances: ParsedBalance[]): number {
+  // Calculates total USD value across all chains
+}
+
+export function formatBalance(balance: string, decimals: number): string {
+  // Formats token amounts with proper decimal precision
+}
+```
+
+**Code Reference:** [`packages/nextjs/utils/balance-utils.ts:8-93`](packages/nextjs/utils/balance-utils.ts#L8-L93)
+
+---
+
+### Demo Use Case: Secure Cross-Chain Gas Top-Up
+
+**Scenario:** User needs to top up gas on Base Sepolia but has ETH on Sepolia testnet.
+
+**Traditional Approach:**
+1. Visit bridge website
+2. Connect wallet and approve spending
+3. Switch to source network manually
+4. Initiate bridge transaction
+5. Wait for confirmations
+6. Switch to destination network
+7. Verify balance manually
+
+**With Tap That X + Avail Nexus:**
+
+1. **Configure Chip** (one-time):
+   ```typescript
+   // Set chip action: Bridge 0.01 ETH Sepolia → Base Sepolia
+   await configuration.setConfiguration(chip, bridgeConfig);
+   ```
+
+2. **Tap to Initiate**:
+   - User taps NFC chip on mobile device
+   - Chip generates EIP-712 signature authorizing bridge
+   - Backend receives request and validates chip signature
+
+3. **Push Notification**:
+   ```typescript
+   // Backend sends VAPID push notification to desktop
+   await sendPushNotification({
+     title: "Bridge Request Detected",
+     body: "Approve 0.01 ETH bridge from Sepolia to Base?",
+     url: `/bridge/execute/${requestId}`
+   });
+   ```
+
+4. **Desktop Verification**:
+   ```typescript
+   // User clicks notification → opens bridge execution page
+   // System verifies chip signature and ownership
+   const chipAddress = recoverChipAddress(signature);
+   const isOwner = await registry.hasChip(wallet, chipAddress);
+   // Only proceeds if chip is registered to connected wallet
+   ```
+
+5. **Execute Bridge**:
+   ```typescript
+   // Nexus SDK handles cross-chain transfer
+   const result = await sdk.bridge({
+     token: "ETH",
+     amount: 0.01,
+     chainId: 84532,        // Base Sepolia
+     sourceChains: [11155111]  // Sepolia
+   });
+   ```
+
+6. **Confirm Success**:
+   ```typescript
+   // Unified balances show updated amounts
+   const balances = await sdk.getUnifiedBalances();
+   // Base Sepolia balance increased by 0.01 ETH
+   ```
+
+**Result:**
+- **Time**: ~30 seconds (vs. 5+ minutes manually)
+- **Steps**: 1 physical tap + push notification approval (vs. 7+ manual steps)
+- **Security**: Hardware-grade chip verification + multi-device 2FA
+- **UX**: No network switching, no bridge UI, no manual balance checking
+
+---
+
+**Built with ❤️ using Avail Nexus SDK**
+
