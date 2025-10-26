@@ -1,3 +1,4 @@
+import { getChainName } from "./chainHelpers";
 import { query } from "./db";
 import webpush from "web-push";
 
@@ -95,25 +96,4 @@ export async function savePushSubscription(userAddress: string, subscription: an
   );
 }
 
-/**
- * Get chain name from chain ID
- * Helper function for notification messages
- */
-export function getChainName(chainId: number): string {
-  const chainNames: Record<number, string> = {
-    // Mainnets
-    1: "Ethereum",
-    10: "Optimism",
-    137: "Polygon",
-    8453: "Base",
-    42161: "Arbitrum",
-    // Testnets
-    11155111: "Sepolia",
-    84532: "Base Sepolia",
-    11155420: "OP Sepolia",
-    421614: "Arbitrum Sepolia",
-    80002: "Polygon Amoy",
-  };
-
-  return chainNames[chainId] || `Chain ${chainId}`;
-}
+export { getChainName };
