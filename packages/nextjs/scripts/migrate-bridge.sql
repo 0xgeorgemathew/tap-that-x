@@ -22,10 +22,13 @@ CREATE TABLE IF NOT EXISTS bridge_requests (
   request_id VARCHAR(66) NOT NULL UNIQUE,
   user_address VARCHAR(42) NOT NULL,
   chip_address VARCHAR(42) NOT NULL,
+  chip_signature TEXT NOT NULL,
   source_chain INTEGER NOT NULL,
   dest_chain INTEGER NOT NULL,
   token_address VARCHAR(42) NOT NULL,
   amount VARCHAR(78) NOT NULL,
+  timestamp BIGINT NOT NULL,
+  nonce VARCHAR(66) NOT NULL,
   created_at TIMESTAMP DEFAULT NOW(),
   expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '15 minutes'
 );

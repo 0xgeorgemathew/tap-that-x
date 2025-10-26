@@ -80,19 +80,22 @@ export async function POST(req: NextRequest) {
       await query(
         `
         INSERT INTO bridge_requests (
-          request_id, user_address, chip_address, source_chain, dest_chain,
-          token_address, amount
+          request_id, user_address, chip_address, chip_signature, source_chain, dest_chain,
+          token_address, amount, timestamp, nonce
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
         [
           requestId,
           owner.toLowerCase(),
           chip.toLowerCase(),
+          chipSignature,
           bridgeParams.sourceChainId,
           bridgeParams.destChainId,
           "0x0000000000000000000000000000000000000000", // ETH
           bridgeParams.amount.toString(),
+          timestamp,
+          nonce,
         ],
       );
 
