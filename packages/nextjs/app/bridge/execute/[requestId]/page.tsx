@@ -88,7 +88,21 @@ export default function BridgeExecutePage() {
       setFlowState("verifying");
       setStatusMessage("Verifying chip signature and wallet ownership...");
 
-      const result = await verifyBridgeRequest(bridgeRequest, walletAddress);
+      // Get the TapThatXProtocol address for the source chain
+      const deployedContracts = await import("~~/contracts/deployedContracts");
+      const contracts = deployedContracts.default[
+        bridgeRequest.sourceChain as keyof typeof deployedContracts.default
+      ] as any;
+      const protocolAddress = contracts?.TapThatXProtocol?.address;
+
+      if (!protocolAddress) {
+        setIsVerified(false);
+        setFlowState("error");
+        setStatusMessage(`TapThatXProtocol not deployed on source chain ${bridgeRequest.sourceChain}`);
+        return;
+      }
+
+      const result = await verifyBridgeRequest(bridgeRequest, walletAddress, protocolAddress);
 
       if (!result.isValid) {
         setIsVerified(false);

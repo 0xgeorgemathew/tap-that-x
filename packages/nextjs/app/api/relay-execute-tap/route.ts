@@ -81,9 +81,9 @@ export async function POST(req: NextRequest) {
         `
         INSERT INTO bridge_requests (
           request_id, user_address, chip_address, chip_signature, source_chain, dest_chain,
-          token_address, amount, timestamp, nonce
+          token_address, amount, call_data, timestamp, nonce
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `,
         [
           requestId,
@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
           bridgeParams.destChainId,
           "0x0000000000000000000000000000000000000000", // ETH
           bridgeParams.amount.toString(),
+          configuration.staticCallData,
           timestamp,
           nonce,
         ],
