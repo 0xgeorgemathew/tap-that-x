@@ -8,7 +8,7 @@ export interface ActionTemplate {
   id: string;
   name: string;
   description: string;
-  category: "payment" | "defi" | "custom";
+  category: "payment" | "defi" | "bridge" | "custom";
   buildCallData: (params: any) => { target: `0x${string}`; callData: `0x${string}`; value?: bigint };
 }
 
@@ -105,6 +105,45 @@ export const uniswapSwapTemplate: ActionTemplate = {
       target: params.routerAddress,
       callData,
       value: 0n,
+    };
+  },
+};
+
+/**
+ * Avail Nexus ETH Bridge Template
+ * Bridges ETH from one chain to another using Avail Nexus
+ * Uses target = 0x0 as a special marker to trigger push notification flow
+ */
+export const availBridgeTemplate: ActionTemplate = {
+  id: "avail-bridge",
+  name: "Gas Refuel",
+  description: "Top up gas on X chain via Avail Nexus",
+  category: "bridge",
+  buildCallData: (params: { sourceChainId: number; destChainId: number; amount: bigint }) => {
+    // Encode bridge parameters as callData
+    const callData = encodeFunctionData({
+      abi: [
+        {
+          name: "bridgeETH",
+          type: "function",
+          stateMutability: "payable",
+          inputs: [
+            { name: "sourceChainId", type: "uint256" },
+            { name: "destChainId", type: "uint256" },
+            { name: "amount", type: "uint256" },
+          ],
+          outputs: [],
+        },
+      ],
+      functionName: "bridgeETH",
+      args: [BigInt(params.sourceChainId), BigInt(params.destChainId), params.amount],
+    });
+
+    // Return target as 0x1 (special marker for bridge actions)
+    // This signals the relay to create a push notification instead of executing directly
+    return {
+      target: "0x0000000000000000000000000000000000000001",
+      callData,
     };
   },
 };
@@ -244,6 +283,7 @@ export const actionTemplates: ActionTemplate[] = [
   uniswapSwapTemplate,
   aaveRebalanceTemplate,
   bridgeETHTemplate,
+  availBridgeTemplate,
   customActionTemplate,
 ];
 
@@ -273,4 +313,36 @@ export function parseTokenAmount(amount: bigint, decimals: number): string {
   const whole = amountStr.slice(0, -decimals) || "0";
   const fraction = amountStr.slice(-decimals).replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : whole;
+}
+
+/**
+ * Check if target address is the bridge marker (0x1)
+ */
+export function isBridgeAction(target: string): boolean {
+  return target.toLowerCase() === "0x0000000000000000000000000000000000000001";
+}
+
+/**
+ * Parse bridge callData to extract parameters
+ * Returns sourceChainId, destChainId, and amount
+ */
+export function parseBridgeCallData(callData: `0x${string}`): {
+  sourceChainId: number;
+  destChainId: number;
+  amount: bigint;
+} | null {
+  try {
+    // Remove 0x prefix and function selector (first 4 bytes = 8 hex chars)
+    const data = callData.slice(10);
+
+    // Each parameter is 32 bytes (64 hex chars)
+    const sourceChainId = parseInt(data.slice(0, 64), 16);
+    const destChainId = parseInt(data.slice(64, 128), 16);
+    const amount = BigInt("0x" + data.slice(128, 192));
+
+    return { sourceChainId, destChainId, amount };
+  } catch (error) {
+    console.error("Failed to parse bridge callData:", error);
+    return null;
+  }
 }

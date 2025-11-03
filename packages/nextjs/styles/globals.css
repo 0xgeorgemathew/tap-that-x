@@ -314,7 +314,7 @@
     background: rgba(255, 255, 255, 0.12);
     backdrop-filter: blur(15px) saturate(180%);
     -webkit-backdrop-filter: blur(15px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.4);
     box-shadow:
       0 8px 32px 0 rgba(31, 38, 135, 0.1),
       0 2px 8px 0 rgba(107, 164, 191, 0.05),
@@ -339,7 +339,7 @@
     background: rgba(26, 31, 46, 0.08);
     backdrop-filter: blur(15px) saturate(180%);
     -webkit-backdrop-filter: blur(15px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.35);
     box-shadow:
       0 8px 32px 0 rgba(0, 0, 0, 0.25),
       0 2px 8px 0 rgba(126, 200, 227, 0.05),

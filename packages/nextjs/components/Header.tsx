@@ -4,8 +4,10 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Wallet } from "lucide-react";
 import { useTheme } from "next-themes";
 import { hardhat } from "viem/chains";
+import { useAccount } from "wagmi";
 import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth";
 
@@ -52,6 +54,7 @@ export const HeaderMenuLinks = () => {
 export const Header = () => {
   const { targetNetwork } = useTargetNetwork();
   const { resolvedTheme } = useTheme();
+  const { isConnected } = useAccount();
   const [mounted, setMounted] = React.useState(false);
   const isLocalNetwork = targetNetwork.id === hardhat.id;
 
@@ -80,6 +83,15 @@ export const Header = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-3">
+          {isConnected && (
+            <Link
+              href="/balances"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-base-content/10 hover:bg-base-content/20 text-base-content font-medium text-sm transition-all hover:scale-105 border border-base-content/20"
+            >
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">View Unified Balance</span>
+            </Link>
+          )}
           <RainbowKitCustomConnectButton />
           {isLocalNetwork && <FaucetButton />}
         </div>

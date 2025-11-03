@@ -53,3 +53,6 @@ integration_plan.md
 IMPLEMENTATION_PLAN.md
 packages/nextjs/tunnel-persistent.sh
 PITCH_DECK.md
+
+dev-tunnel.sh
+/Docs
