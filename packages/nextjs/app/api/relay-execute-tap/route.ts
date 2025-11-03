@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWalletClient, formatEther, http, publicActions } from "viem";
+import { createPublicClient, createWalletClient, formatEther, http, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import * as chains from "viem/chains";
 import deployedContracts from "~~/contracts/deployedContracts";
+import { isBridgeAction, parseBridgeCallData } from "~~/utils/actionTemplates";
+import { query } from "~~/utils/db";
+import { getChainName, sendBridgeNotification } from "~~/utils/pushNotifications";
 import { getAlchemyHttpUrl } from "~~/utils/scaffold-eth/networks";
 
 export const maxDuration = 30;
@@ -46,13 +49,76 @@ export async function POST(req: NextRequest) {
       transport: http(rpcUrl),
     }).extend(publicActions);
 
-    // Detect if this is an Aave rebalancer action by checking the target contract
-    const config = await client.readContract({
+    // Check configuration to see what type of action this is
+    const publicClient = createPublicClient({
+      chain: chainConfig,
+      transport: http(rpcUrl),
+    });
+
+    const configuration = (await publicClient.readContract({
       address: contracts.TapThatXConfiguration.address,
       abi: contracts.TapThatXConfiguration.abi,
       functionName: "getConfiguration",
       args: [owner as `0x${string}`, chip as `0x${string}`],
-    });
+    })) as any;
+
+    // Check if target is 0x0 (bridge action marker - Avail Nexus SDK)
+    if (isBridgeAction(configuration.targetContract)) {
+      // Parse bridge parameters from callData
+      const bridgeParams = parseBridgeCallData(configuration.staticCallData as `0x${string}`);
+      if (!bridgeParams) {
+        return NextResponse.json({ error: "Invalid bridge callData" }, { status: 400 });
+      }
+
+      // Generate unique request ID using crypto random
+      const randomBytes = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      const requestId = `0x${randomBytes}`;
+
+      // Store bridge request in database
+      await query(
+        `
+        INSERT INTO bridge_requests (
+          request_id, user_address, chip_address, chip_signature, source_chain, dest_chain,
+          token_address, amount, call_data, timestamp, nonce
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
+        [
+          requestId,
+          owner.toLowerCase(),
+          chip.toLowerCase(),
+          chipSignature,
+          bridgeParams.sourceChainId,
+          bridgeParams.destChainId,
+          "0x0000000000000000000000000000000000000000", // ETH
+          bridgeParams.amount.toString(),
+          configuration.staticCallData,
+          timestamp,
+          nonce,
+        ],
+      );
+
+      // Send push notification to user's desktop
+      await sendBridgeNotification(owner, {
+        requestId,
+        amount: bridgeParams.amount.toString(),
+        token: "ETH",
+        sourceChainId: bridgeParams.sourceChainId,
+        destChainId: bridgeParams.destChainId,
+        sourceChainName: getChainName(bridgeParams.sourceChainId),
+        destChainName: getChainName(bridgeParams.destChainId),
+        url: `/bridge/execute/${requestId}`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requiresApproval: true,
+        requestId,
+        message: "Bridge request created. Check your desktop browser for approval notification.",
+      });
+    }
 
     // Check if target is Aave rebalancer (needs much more gas due to flash loan complexity)
     // Flash loan operations are extremely gas-intensive:
@@ -64,7 +130,7 @@ export async function POST(req: NextRequest) {
     // Default estimation often underestimates, causing OutOfGas errors during swap
     const isAaveRebalancer =
       contracts.TapThatXAaveRebalancer &&
-      (config as any).targetContract?.toLowerCase() === contracts.TapThatXAaveRebalancer.address?.toLowerCase();
+      configuration.targetContract?.toLowerCase() === contracts.TapThatXAaveRebalancer.address?.toLowerCase();
 
     // Check if target is bridge extension (dual bridge operations need high gas)
     // Bridge extension operations are gas-intensive due to:
@@ -73,7 +139,7 @@ export async function POST(req: NextRequest) {
     // - Multiple EVM state changes across cross-chain messaging
     const isBridgeExtension =
       contracts.TapThatXBridgeETHViaWETH &&
-      (config as any).targetContract?.toLowerCase() === contracts.TapThatXBridgeETHViaWETH.address?.toLowerCase();
+      configuration.targetContract?.toLowerCase() === contracts.TapThatXBridgeETHViaWETH.address?.toLowerCase();
 
     // Check relayer balance if value is being sent
     const valueToSend = value ? BigInt(value) : 0n;
@@ -92,6 +158,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Normal execution path (non-Avail-bridge actions)
     // Call executeTap on TapThatXExecutor with appropriate gas limit
     const hash = await client.writeContract({
       address: contracts.TapThatXExecutor.address,
@@ -121,7 +188,6 @@ export async function POST(req: NextRequest) {
       blockNumber: receipt.blockNumber.toString(),
     });
   } catch (error) {
-    console.error("Execute tap relay error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Execution relay failed" },
       { status: 500 },

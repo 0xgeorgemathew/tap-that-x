@@ -33,8 +33,21 @@ const nextConfig: NextConfig = {
       "**/foundry/cache/**",
     ],
   },
-  webpack: config => {
-    config.resolve.fallback = { fs: false, net: false, tls: false };
+  webpack: (config, { isServer }) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        buffer: require.resolve("buffer/"),
+        process: require.resolve("process/browser"),
+      };
+    }
+
     config.externals.push("pino-pretty", "lokijs", "encoding");
     return config;
   },
